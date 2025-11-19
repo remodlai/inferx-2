@@ -57,3 +57,4 @@ spec:
     - port: 8080
       targetPort: 8080
       nodePort: 31260  # Can customize between 30000–32767
+

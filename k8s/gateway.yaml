@@ -5,6 +5,7 @@ metadata:
   labels:
     app: gateway
 spec: 
+ 
   replicas: 1
   selector:
     matchLabels:
@@ -14,6 +15,8 @@ spec:
       labels:
         app: gateway
     spec:
+      nodeSelector:
+        inferx-gateway: "true"
       hostPID: true
       containers:
         - name: gateway

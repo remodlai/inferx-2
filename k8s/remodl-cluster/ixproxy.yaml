@@ -14,7 +14,7 @@ spec:
         app: ixproxy
     spec:
       nodeSelector:
-        inferx_nodeType: inferx_file
+        cloud: "hyperstack"
       tolerations:
         - key: nvidia.com/gpu
           operator: Exists
@@ -79,14 +79,14 @@ spec:
             value: "false"                     
           resources:
             requests:
-              cpu: "2"
-              memory: "10Gi"
-              hugepages-2Mi: "0"
+              cpu: "1"
+              memory: "30Gi"              # Regular memory request (RAM)
+              hugepages-2Mi: "0" 
             limits:
-              cpu: "6"
-              memory: "20Gi"
-              hugepages-2Mi: "0"
-              nvidia.com/gpu: 1
+              cpu: "2"
+              memory: "30Gi"              # Regular memory request (RAM)
+              hugepages-2Mi: "0" 
+              # nvidia.com/gpu: 1
           volumeMounts:
             - mountPath: /run/udev
               name: run-udev
