@@ -183,11 +183,14 @@ def auth_callback():
             raise Exception("Missing nonce in session")
 
         userinfo = keycloak.parse_id_token(token, nonce=nonce)  # Validate nonce
-        session['user'] = userinfo
         session['username'] = userinfo.get('preferred_username')
         session['access_token'] = token.get('access_token')
-        session['token'] = token
-        session['id_token'] = token.get('id_token')
+        # Store minimal token data to avoid cookie size limits
+        session['token'] = {
+            'access_token': token.get('access_token'),
+            'refresh_token': token.get('refresh_token'),
+            'expires_at': token.get('expires_at')
+        }
 
         if redirectpath=='':
             return redirect(url_for('prefix.ListFunc'))
@@ -249,7 +252,7 @@ def create_apikey():
     req = request.get_json()
     url = "{}/apikey/".format(apihostaddr)
     resp = requests.put(url, headers=headers, json=req)
-    return resp
+    return (resp.content, resp.status_code, dict(resp.headers))
 
 @prefix_bp.route('/apikeys', methods=['DELETE'])
 @require_login
@@ -262,7 +265,7 @@ def delete_apikey():
     req = request.get_json()
     url = "{}/apikey/".format(apihostaddr)
     resp = requests.delete(url, headers=headers, json=req)
-    return resp
+    return (resp.content, resp.status_code, dict(resp.headers))
 
 def read_markdown_file(filename):
     """Read and convert Markdown file to HTML"""

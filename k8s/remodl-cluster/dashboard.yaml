@@ -18,7 +18,7 @@ spec:
         inferx-dashboard: "true"
       containers:
         - name: inferx-dashboard
-          image: remodlai/inferx-dashboard:v0.1.5-custom-v7
+          image: remodlai/inferx-dashboard:v0.1.5-custom-v9
           imagePullPolicy: Always
           env:
             - name: KEYCLOAK_URL
@@ -36,7 +36,7 @@ spec:
               mountPath: /etc/letsencrypt/
           livenessProbe:
             httpGet:
-              path: /demo/intro?name=home.md
+              path: /demo/
               port: 1250
             initialDelaySeconds: 10
             periodSeconds: 10
