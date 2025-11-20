@@ -210,12 +210,12 @@ spec:
             value: "false"                     
           resources:
             requests:
-              cpu: "4"
-              memory: "15Gi"
+              cpu: "10"
+              memory: "3Gi"
               hugepages-2Mi: "0"
             limits:
-              cpu: "8"
-              memory: "25Gi"
+              cpu: "50"
+              memory: "22Gi"
               hugepages-2Mi: "0"
               nvidia.com/gpu: 1
           volumeMounts:
@@ -227,7 +227,8 @@ spec:
               mountPath: /dev/shm
             # - mountPath: /opt/inferx/
             #   name: opt-inferx
-            # - mountPath: /opt/inferx/config
+            - mountPath: /opt/inferx/config
+              name: opt-inferx-config
             #   name: opt-inferx-config
             - mountPath: /opt/inferx/bin
               name: opt-inferx-bin

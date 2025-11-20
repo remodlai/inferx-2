@@ -14,8 +14,8 @@ spec:
       labels:
         app: scheduler
     spec:
-      #nodeSelector:
-       # inferx-scheduler: "true"
+      nodeSelector:
+        inferx-scheduler: "true"
       hostPID: true
       containers:
         - name: scheduler

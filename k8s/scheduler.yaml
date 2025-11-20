@@ -29,7 +29,7 @@ spec:
           - name: STATESVC_ADDR
             value: "http://statesvc:1237"
           - name: ETCD_ADDRS
-            value: "http://localhost:2379"
+            value: "http://etcd:2379"
           - name: SCHEDULER_PORT
             value: "1238"
           volumeMounts:

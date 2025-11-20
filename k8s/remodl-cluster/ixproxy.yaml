@@ -79,14 +79,14 @@ spec:
             value: "false"                     
           resources:
             requests:
-              cpu: "1"
-              memory: "30Gi"              # Regular memory request (RAM)
+              cpu: "10"
+              memory: "10Gi"              # Regular memory request (RAM)
               hugepages-2Mi: "0" 
             limits:
-              cpu: "2"
-              memory: "30Gi"              # Regular memory request (RAM)
+              cpu: "50"
+              memory: "50Gi"              # Regular memory request (RAM)
               hugepages-2Mi: "0" 
-              # nvidia.com/gpu: 1
+              #nvidia.com/gpu: 1
           volumeMounts:
             - mountPath: /run/udev
               name: run-udev
@@ -96,7 +96,8 @@ spec:
               mountPath: /dev/shm
             # - mountPath: /opt/inferx/
             #   name: opt-inferx
-            # - mountPath: /opt/inferx/config
+            - mountPath: /opt/inferx/config
+              name: opt-inferx-config
             #   name: opt-inferx-config
             - mountPath: /opt/inferx/bin
               name: opt-inferx-bin
