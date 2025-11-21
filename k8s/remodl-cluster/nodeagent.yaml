@@ -57,8 +57,8 @@ spec:
               mountPath: /dev/shm
             # - mountPath: /opt/inferx/
             #   name: opt-inferx
-            - mountPath: /opt/inferx/config
-              name: opt-inferx-config
+            # - mountPath: /opt/inferx/config
+            #   name: opt-inferx-config
             - mountPath: /opt/inferx/bin
               name: opt-inferx-bin
             - mountPath: /opt/inferx/work
@@ -171,6 +171,7 @@ spec:
             runAsUser: 0
             runAsGroup: 0
           env:
+          
           - name: STATESVC_ADDR
             value: "http://statesvc:1237"
           - name: RUN_SERVICE
@@ -211,10 +212,10 @@ spec:
           resources:
             requests:
               cpu: "10"
-              memory: "3Gi"
+              memory: "10Gi"
               hugepages-2Mi: "0"
             limits:
-              cpu: "50"
+              cpu: "20" # the number of cpus available on a node (that we are exposing to the container)
               memory: "22Gi"
               hugepages-2Mi: "0"
               nvidia.com/gpu: 1

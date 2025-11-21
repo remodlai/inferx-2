@@ -23,13 +23,13 @@ spec:
         - name: ixproxy
           image: inferx/inferx_na:${VERSION}
           imagePullPolicy: IfNotPresent
-          livenessProbe:          # <-- Kubernetes keepalive check
+          livenessProbe:
             httpGet:
               path: /
               port: 1240
-            initialDelaySeconds: 6    # wait before first probe
-            periodSeconds: 10         # ping every 10s
-            timeoutSeconds: 2         # fail if no response in 2s
+            initialDelaySeconds: 6
+            periodSeconds: 10
+            timeoutSeconds: 2
             failureThreshold: 3
           securityContext:
             privileged: true
@@ -38,8 +38,21 @@ spec:
             runAsUser: 0
             runAsGroup: 0
           env:
-          - name: CUDA_VISIBLE_DEVICES
-            value: "0"  # Manually set if not auto-set
+          # - name: CUDA_VISIBLE_DEVICES
+          #   value: "0"
+          # HuggingFace Token
+          - name: HF_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: hf-secret
+                key: token
+          # HuggingFace Cache Path
+          - name: HF_HOME
+            value: "/opt/inferx/cache/hub"
+          - name: HF_HUB_CACHE
+            value: "/opt/inferx/cache/hub"
+          - name: TRANSFORMERS_CACHE
+            value: "/opt/inferx/cache/hub"
           - name: STATESVC_ADDR
             value: "http://statesvc:1237"
           - name: RUN_SERVICE
@@ -82,11 +95,11 @@ spec:
           resources:
             requests:
               cpu: "10"
-              memory: "10Gi"              # Regular memory request (RAM)
+              memory: "10Gi"
               hugepages-2Mi: "0" 
             limits:
               cpu: "20"
-              memory: "50Gi"              # Regular memory request (RAM)
+              memory: "50Gi"
               hugepages-2Mi: "0" 
               #nvidia.com/gpu: 1
           volumeMounts:
@@ -96,10 +109,6 @@ spec:
               name: dev-hugepages
             - name: shm
               mountPath: /dev/shm
-            # - mountPath: /opt/inferx/
-            #   name: opt-inferx
-           
-            #   name: opt-inferx-config
             - mountPath: /opt/inferx/bin
               name: opt-inferx-bin
             - mountPath: /opt/inferx/work
