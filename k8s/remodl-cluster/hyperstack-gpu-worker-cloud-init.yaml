@@ -1,0 +1,95 @@
+#cloud-config
+
+# HyperStack Cloud-Init Configuration
+# Built collaboratively - add steps below
+
+# Run commands during first boot
+runcmd:
+  # 1. Install Tailscale
+  - ['sh', '-c', 'curl -fsSL https://tailscale.com/install.sh | sudo sh']
+
+  # 2. Authenticate Tailscale
+  - ['sudo', 'tailscale', 'up', '--auth-key=tskey-auth-kvpjzfEAVW11CNTRL-zNQhTGW5MriFtR8XtBLTrie9o9eUrH3DU']
+
+  # 3. Enable Tailscale SSH
+  - ['sudo', 'tailscale', 'set', '--ssh']
+
+  # 4. Get Tailscale IP and set as environment variable
+  - ['sh', '-c', 'echo "TAILSCALE_IP=$(tailscale ip -4)" | sudo tee -a /etc/environment']
+
+  # 5. Verify GPU resources
+  - ['sudo', 'nvidia-smi', '-L']
+
+  # 6. Detect GPU info and create k3s config
+  - |
+    #!/bin/bash
+    # Wait for Tailscale to be fully up
+    sleep 5
+
+    # Get Tailscale IP
+    TAILSCALE_IP=$(tailscale ip -4)
+
+    # Detect GPU type and count
+    GPU_INFO=$(sudo nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
+    GPU_COUNT=$(sudo nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)
+
+    # Determine GPU type label
+    if echo "$GPU_INFO" | grep -qi "A6000"; then
+      GPU_TYPE="a6000"
+      NVLINK="true"
+    elif echo "$GPU_INFO" | grep -qi "RTX 6000"; then
+      GPU_TYPE="rtx6000"
+      NVLINK="true"
+    elif echo "$GPU_INFO" | grep -qi "L40"; then
+      GPU_TYPE="l40"
+      NVLINK="false"
+    elif echo "$GPU_INFO" | grep -qi "H100"; then
+      GPU_TYPE="h100"
+      NVLINK="true"
+    elif echo "$GPU_INFO" | grep -qi "A100"; then
+      GPU_TYPE="a100"
+      NVLINK="true"
+    else
+      GPU_TYPE="unknown"
+      NVLINK="false"
+    fi
+
+    # Create k3s config directory
+    sudo mkdir -p /etc/rancher/k3s
+
+    # Create k3s config.yaml
+    echo "node-ip: ${TAILSCALE_IP}" | sudo tee /etc/rancher/k3s/config.yaml > /dev/null
+    echo "flannel-iface: tailscale0" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
+    echo "kubelet-arg:" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
+    echo "  - \"node-labels=inferx_nodeType=inferx_file\"" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
+    echo "  - \"node-labels=inferx_storage=data\"" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
+    echo "  - \"node-labels=cloud=hyperstack\"" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
+    echo "  - \"node-labels=gpu.type=${GPU_TYPE}\"" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
+    echo "  - \"node-labels=gpu.count=${GPU_COUNT}\"" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
+    echo "  - \"node-labels=nvlink=${NVLINK}\"" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
+    echo "  - \"register-with-taints=nvidia.com/gpu=true:NoSchedule\"" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
+
+    echo "k3s config created with GPU type: ${GPU_TYPE}, count: ${GPU_COUNT}, nvlink: ${NVLINK}"
+
+  # 7. Install and join k3s cluster with generated node name
+  - |
+    #!/bin/bash
+    # Wait for k3s config to be created
+    sleep 2
+
+    # Get GPU info from the config we just created
+    GPU_TYPE=$(grep 'gpu.type=' /etc/rancher/k3s/config.yaml | sed 's/.*gpu.type=//' | tr -d '"')
+    GPU_COUNT=$(grep 'gpu.count=' /etc/rancher/k3s/config.yaml | sed 's/.*gpu.count=//' | tr -d '"')
+
+    # Generate random 3-character alphanumeric string (lowercase)
+    RANDOM_ID=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 3 | head -n 1)
+
+    # Construct node name
+    NODE_NAME="inferx-gpu-worker-${RANDOM_ID}-${GPU_TYPE}-${GPU_COUNT}"
+
+    echo "Joining k3s cluster as node: ${NODE_NAME}"
+
+    # Install k3s and join cluster
+    curl -sfL https://get.k3s.io | K3S_URL=https://100.65.227.120:6443 \
+      K3S_TOKEN=K10f34afe5ee273ea04d1d3ad746e1b19ae135b1cf27b10d396ad9f0436a81819c8::server:a0386b56edc4a846e2a085b7920b6d89 \
+      INSTALL_K3S_EXEC="--docker --with-node-id --node-name=${NODE_NAME}" sudo sh -

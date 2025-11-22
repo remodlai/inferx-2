@@ -16,6 +16,10 @@ spec:
     spec:
       nodeSelector:
         inferx-scheduler: "true"
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
       hostPID: true
       containers:
         - name: scheduler

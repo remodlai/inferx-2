@@ -82,7 +82,7 @@ spec:
           - name: ENABLE_2MB_PAGE
             value: "false"  
           - name: CONTEXT_OVERHEAD
-            value: "1500"   
+            value: "2000"   
           - name: CONTEXT_COUNT
             value: "1"      
           - name: ALLOC_CPU
@@ -94,12 +94,12 @@ spec:
             value: "false"                     
           resources:
             requests:
-              cpu: "10"
+              cpu: "3"
               memory: "10Gi"
               hugepages-2Mi: "0" 
             limits:
               cpu: "20"
-              memory: "50Gi"
+              memory: "100Gi"
               hugepages-2Mi: "0" 
               #nvidia.com/gpu: 1
           volumeMounts:

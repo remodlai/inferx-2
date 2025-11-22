@@ -211,12 +211,12 @@ spec:
             value: "false"                     
           resources:
             requests:
-              cpu: "10"
+              cpu: "3"
               memory: "10Gi"
               hugepages-2Mi: "0"
             limits:
               cpu: "20" # the number of cpus available on a node (that we are exposing to the container)
-              memory: "22Gi"
+              memory: "100Gi"
               hugepages-2Mi: "0"
               nvidia.com/gpu: 1
           volumeMounts:
@@ -228,8 +228,8 @@ spec:
               mountPath: /dev/shm
             # - mountPath: /opt/inferx/
             #   name: opt-inferx
-            - mountPath: /opt/inferx/config
-              name: opt-inferx-config
+            # - mountPath: /opt/inferx/config
+            #   name: opt-inferx-config
             #   name: opt-inferx-config
             - mountPath: /opt/inferx/bin
               name: opt-inferx-bin
