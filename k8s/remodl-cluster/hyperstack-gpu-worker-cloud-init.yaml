@@ -91,7 +91,8 @@ runcmd:
       # Install k3s agent and join cluster
       # Note: K3S_URL points to control plane Tailscale IP for initial join
       # After cloud-init, manually rejoin with external IP flags for cross-cloud (see LEARNINGS.md)
+      # DO NOT USE '--node-id' as this will create a random node id and break the cluster.
       curl -sfL https://get.k3s.io | K3S_URL=https://100.65.227.120:6443 \
       K3S_TOKEN=K10f34afe5ee273ea04d1d3ad746e1b19ae135b1cf27b10d396ad9f0436a81819c8::server:a0386b56edc4a846e2a085b7920b6d89 \
-      INSTALL_K3S_EXEC="--docker --with-node-id " sh -
+      INSTALL_K3S_EXEC="--docker --node-name=${NODE_NAME}" sh -
       

@@ -1,0 +1,11 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: csi-hyperstack-inferx
+provisioner: hyperstack.csi.nexgencloud.com
+volumeBindingMode: WaitForFirstConsumer
+parameters:
+  type: Cloud-SSD
+  environment: inferx-ev
+reclaimPolicy: Delete
+allowVolumeExpansion: true

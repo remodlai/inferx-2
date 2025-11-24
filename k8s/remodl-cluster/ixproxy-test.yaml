@@ -109,8 +109,8 @@ spec:
               name: dev-hugepages
             - name: shm
               mountPath: /dev/shm
-            - mountPath: /opt/inferx/bin
-              name: opt-inferx-bin
+            # - mountPath: /opt/inferx/bin
+            #   name: opt-inferx-bin
             - mountPath: /opt/inferx/work
               name: opt-inferx-work
             - mountPath: /opt/inferx/log
@@ -149,9 +149,9 @@ spec:
         - name: opt-inferx-work
           hostPath:
             path: /opt/inferx/work
-        - name: opt-inferx-bin
-          hostPath:
-            path: /opt/inferx/bin
+        # - name: opt-inferx-bin
+        #   hostPath:
+        #     path: /opt/inferx/bin
         - name: opt-inferx-cache
           hostPath:
             path: /opt/inferx/cache

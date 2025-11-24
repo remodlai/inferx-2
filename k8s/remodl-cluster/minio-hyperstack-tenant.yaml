@@ -44,8 +44,8 @@ spec:
         - ReadWriteOnce
         resources:
           requests:
-            storage: 2000Gi
-        storageClassName: local-path
+            storage: 1500Gi
+        storageClassName: csi-hyperstack-inferx
     # Node affinity to GPU node with minio-node=true label
     affinity:
       nodeAffinity:

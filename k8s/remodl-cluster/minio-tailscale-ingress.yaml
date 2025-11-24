@@ -1,0 +1,47 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: minio-aws-console
+  namespace: minio-aws
+  annotations:
+    tailscale.com/funnel: "true"
+    tailscale.com/backend-tls: "true"
+spec:
+  ingressClassName: tailscale
+  tls:
+  - hosts:
+    - minio-aws
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: minio-aws-console
+            port:
+              number: 9443
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: minio-hyperstack-console
+  namespace: minio-hyperstack
+  annotations:
+    tailscale.com/funnel: "true"
+    tailscale.com/backend-tls: "true"
+spec:
+  ingressClassName: tailscale
+  tls:
+  - hosts:
+    - minio-hyperstack
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: minio-hyperstack-console
+            port:
+              number: 9443
