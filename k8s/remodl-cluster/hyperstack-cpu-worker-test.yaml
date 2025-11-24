@@ -63,9 +63,5 @@ runcmd:
       curl -sfL https://get.k3s.io | K3S_URL=https://100.65.227.120:6443 \
       K3S_TOKEN=K10f34afe5ee273ea04d1d3ad746e1b19ae135b1cf27b10d396ad9f0436a81819c8::server:a0386b56edc4a846e2a085b7920b6d89 \
       INSTALL_K3S_EXEC="--docker --with-node-id --node-name=${NODE_NAME}" sh -
-      sudo systemctl stop k3s
-      sudo k3s agent --docker --with-node-id --node-name=${NODE_NAME} \
-      --server https://100.65.227.120:6443 \
-      --token K10f34afe5ee273ea04d1d3ad746e1b19ae135b1cf27b10d396ad9f0436a81819c8::server:a0386b56edc4a846e2a085b7920b6d89 \
-      --debug
+      
       
