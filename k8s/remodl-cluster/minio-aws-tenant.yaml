@@ -1,0 +1,86 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-aws-config
+  namespace: minio-aws
+stringData:
+  config.env: |-
+    export MINIO_ROOT_USER="admin"
+    export MINIO_ROOT_PASSWORD="InferX-MinIO-AWS-2025"
+    export MINIO_STORAGE_CLASS_STANDARD="EC:2"
+    export MINIO_BROWSER="on"
+type: Opaque
+---
+apiVersion: v1
+data:
+  CONSOLE_ACCESS_KEY: YWRtaW4=
+  CONSOLE_SECRET_KEY: SW5mZXJYLU1pbklPLUFXUy0yMDI1
+kind: Secret
+metadata:
+  name: minio-aws-console
+  namespace: minio-aws
+type: Opaque
+---
+apiVersion: minio.min.io/v2
+kind: Tenant
+metadata:
+  name: minio-aws
+  namespace: minio-aws
+  labels:
+    app: minio-aws
+spec:
+  configuration:
+    name: minio-aws-config
+  image: quay.io/minio/minio:latest
+  imagePullSecret: {}
+  pools:
+  - name: pool-0
+    servers: 4
+    volumesPerServer: 1
+    volumeClaimTemplate:
+      apiVersion: v1
+      kind: persistentvolumeclaims
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 50Gi
+        storageClassName: ebs-csi-default-sc
+    # Node affinity to AWS nodes only
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: cloud
+              operator: In
+              values:
+              - aws
+    securityContext:
+      runAsUser: 1000
+      runAsGroup: 1000
+      fsGroup: 1000
+      runAsNonRoot: true
+      fsGroupChangePolicy: OnRootMismatch
+    containerSecurityContext:
+      runAsUser: 1000
+      runAsGroup: 1000
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      seccompProfile:
+        type: RuntimeDefault
+    resources:
+      requests:
+        cpu: 250m
+        memory: 1Gi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+  mountPath: /export
+  requestAutoCert: true
+  users:
+  - name: minio-aws-console
