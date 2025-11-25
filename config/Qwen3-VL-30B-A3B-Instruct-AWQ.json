@@ -1,31 +1,31 @@
 {
     "type": "function",
     "tenant": "public",
-    "namespace": "deepseek-ai",
-    "name": "DeepSeek-R1-Distill-Qwen-7B",
+    "namespace": "Qwen",
+    "name": "Qwen3-VL-30B-A3B-Instruct-AWQ",
     "object": {
         "spec": {
-            "image": "vllm/vllm-openai:v0.10.0",
+            "image": "vllm/vllm-openai:v0.11.1",
             "commands": [
                 "--model",
-                "/root/.cache/huggingface/git/DeepSeek-R1-Distill-Qwen-7B",
-                "--served-model-name",
-                "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
-                "--uvicorn-log-level",
-                "warning",
-                "--async-scheduling",
+                "remodlai/Qwen3-VL-30B-A3B-Instruct-AWQ",
+                "--disable-custom-all-reduce",
                 "--trust-remote-code",
+                "--gpu-memory-utilization",
+                "0.99",
                 "--max-model-len",
                 "2000",
-                "--tensor-parallel-size=2"
+                "--dtype",
+                "float16",
+                "--tensor-parallel-size=1"
             ],
             "resources": {
-                "CPU": 20000,
-                "Mem": 60000,
+                "CPU": 12000,
+                "Mem": 80000,
                 "GPU": {
                     "Type": "Any",
-                    "Count": 2,
-                    "vRam": 13800
+                    "Count": 1,
+                    "vRam": 70000
                 }
             },
             "envs": [
@@ -35,7 +35,11 @@
                 ],
                 [
                     "TORCH_CUDA_ARCH_LIST",
-                    "8.6"
+                    "9.0;9.0+PTX"
+                ],
+                [
+                    "VLLM_USE_BF16",
+                    "0"
                 ]
             ],
             "mounts": [
@@ -50,20 +54,20 @@
                 "probe": "/health"
             },
             "sample_query": {
-                "apiType": "text2text",
-                "prompt": "what is the integral of x^2 from 0 to 2?\nPlease reason step by step, and put your final answer within \\boxed{}.",
-                "path": "v1/completions",
+                "apiType": "image2text",
+                "prompt": "What is in this image?",
+                "path": "v1/chat/completions",
+                "imageUrl": "https://www.ilankelman.org/stopsigns/australia.jpg",
                 "body": {
-                    "model": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+                    "model": "remodlai/Qwen3-VL-30B-A3B-Instruct-AWQ",
                     "max_tokens": "1000",
-                    "temperature": "0",
-                    "stream": "true"
+                    "temperature": "0"
                 }
             },
             "standby": {
-                "gpu": "Blob",
-                "pageable": "Blob",
-                "pinned": "Blob"
+                "gpu": "Mem",
+                "pageable": "File",
+                "pinned": "Mem"
             }
         }
     }

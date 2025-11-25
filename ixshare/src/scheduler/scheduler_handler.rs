@@ -2119,7 +2119,7 @@ impl SchedulerHandler {
                 return Ok(());
             }
 
-            if state != PodState::Standby {
+            if state != PodState::Standby && state != PodState::PullingImage {
                 continue;
             }
 
@@ -2493,6 +2493,10 @@ impl SchedulerHandler {
             tps.push(termniatePod);
         }
 
+        let mut spec = func.object.spec.clone();
+        let policy = self.FuncPolicy(&tenant, &spec.policy);
+        spec.policy = ObjRef::Obj(policy);
+
         let request = tonic::Request::new(na::CreateFuncPodReq {
             tenant: tenant.to_owned(),
             namespace: namespace.to_owned(),
@@ -2502,7 +2506,7 @@ impl SchedulerHandler {
             labels: Vec::new(),
             annotations: annotations,
             create_type: createType.into(),
-            funcspec: serde_json::to_string(&func.object.spec)?,
+            funcspec: serde_json::to_string(&spec)?,
             alloc_resources: serde_json::to_string(allocResources).unwrap(),
             resource_quota: serde_json::to_string(resourceQuota).unwrap(),
             terminate_pods: tps,
@@ -2961,7 +2965,7 @@ pub async fn GetClient() -> Result<CacherClient> {
             Ok(client) => return Ok(client),
             Err(e) => {
                 println!(
-                    "informer::GetClient fail to connect to {} with error {:?}",
+                    "schedudlerHandler informer::GetClient fail to connect to {} with error {:?}",
                     addr, e
                 );
             }

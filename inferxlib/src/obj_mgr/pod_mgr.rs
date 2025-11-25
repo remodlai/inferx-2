@@ -16,6 +16,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::time::SystemTime;
 
+use super::funcpolicy_mgr::FuncPolicy;
+use super::funcpolicy_mgr::FuncPolicySpec;
 use super::funcsnapshot_mgr::*;
 use crate::common::*;
 use crate::data_obj::DataObject;
@@ -87,8 +89,6 @@ pub struct FuncPodSpec {
 
     pub reqResources: Resources,
     pub allocResources: NodeResources,
-
-    pub readinessProbe: HttpEndpoint,
 
     pub standby: Standby,
     pub snapshotStandbyInfo: SnapshotStandyInfo,
@@ -225,6 +225,7 @@ impl FuncPod {
 pub enum PodState {
     // init state
     Init,
+    PullingImage,
     // scheduler start to creating a new pod
     Creating,
     // a state when startup

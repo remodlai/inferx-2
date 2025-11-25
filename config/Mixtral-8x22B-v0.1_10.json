@@ -1,28 +1,27 @@
 {
     "type": "function",
     "tenant": "public",
-    "namespace": "Qwen",
-    "name": "Qwen2.5-Coder-14B-Instruct-GPTQ-Int8",
+    "namespace": "mistralai",
+    "name": "Mixtral-8x22B-v0.1_10",
     "object": {
         "spec": {
-            "image": "vllm/vllm-openai:v0.11.0",
+            "image": "vllm/vllm-openai:v0.10.0",
             "commands": [
                 "--model",
-                "Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int8",
-                "--trust-remote-code",
-                "--uvicorn-log-level",
-                "warning",
+                "mistralai/Mixtral-8x22B-v0.1",
+                "--gpu-memory-utilization",
+                "0.95",
                 "--max-model-len",
-                "2048",
-                "--tensor-parallel-size=2"
+                "1200",
+                "--tensor-parallel-size=4"
             ],
             "resources": {
                 "CPU": 20000,
-                "Mem": 50000,
+                "Mem": 100000,
                 "GPU": {
                     "Type": "Any",
-                    "Count": 2,
-                    "vRam": 13800
+                    "Count": 4,
+                    "vRam": 72100
                 }
             },
             "envs": [
@@ -33,10 +32,6 @@
                 [
                     "VLLM_CUDART_SO_PATH",
                     "/usr/local/cuda-12.1/targets/x86_64-linux/lib/libcudart.so.12"
-                ],
-                [
-                    "VLLM_USE_FLASHINFER_SAMPLER",
-                    "0"
                 ]
             ],
             "mounts": [
@@ -52,26 +47,34 @@
             },
             "sample_query": {
                 "apiType": "text2text",
-                "prompt": "write a quick sort algorithm.",
+                "prompt": "I like traveling by train because",
                 "path": "v1/completions",
                 "body": {
-                    "model": "Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int8",
+                    "model": "mistralai/Mixtral-8x22B-v0.1",
                     "max_tokens": "1000",
                     "temperature": "0",
                     "stream": "true"
                 }
             },
             "standby": {
-                "gpu": "Blob",
-                "pageable": "Blob",
-                "pinned": "Blob"
+                "gpu": "Mem",
+                "pageable": "File",
+                "pinned": "Mem"
             },
             "policy": {
                 "Obj": {
                     "min_replica": 0,
-                    "max_replica": 1,
+                    "max_replica": 10,
                     "standby_per_node": 1,
-                    "parallel": 200,
+                    "parallel": 2,
+                    "queue_len": 1000,
+                    "queue_timeout": 30.0,
+                    "scaleout_policy": {
+                        "WaitQueueRatio": {
+                            "wait_ratio": 0.1
+                        }
+                    },
+                    "scalein_timeout": 0.01,
                     "runtime_config": {
                         "graph_sync": false
                     }
