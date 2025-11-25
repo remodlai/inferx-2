@@ -5,11 +5,15 @@
 
 # Run commands during first boot
 runcmd:
-  # 1. Install Tailscale
+  # 1. Ensure sudo is installed and available
+  - ['apt-get', 'update']
+  - ['apt-get', 'install', '-y', 'sudo']
+
+  # 2. Install Tailscale
   - ['sh', '-c', 'curl -fsSL https://tailscale.com/install.sh | sudo sh']
 
-  # 2. Authenticate Tailscale
-  - ['sudo', 'tailscale', 'up', '--auth-key=tskey-auth-kLpaaau9Vc11CNTRL-fysPfdLK7V1tCC5UmZ8DV1HqEznKWeUy', '--ssh']
+  # 3. Authenticate Tailscale
+  - ['sudo', 'tailscale', 'up', '--auth-key=tskey-auth-krHBv2re3M11CNTRL-E2KiNyZ68DKmjY6xY41eCKW5zVifRWVi', '--ssh']
 
 
 
@@ -116,7 +120,7 @@ runcmd:
 
       echo "Node ${NODE_NAME} joined successfully"
 
-  # 8. Install goofys for MinIO S3 bucket mounting
+  # 9. Install goofys for MinIO S3 bucket mounting
   - |
       #!/bin/bash
       echo "Installing goofys..."
@@ -128,7 +132,7 @@ runcmd:
 
       echo "goofys installed successfully"
 
-  # 9. Create InferX directory structure
+  # 10. Create InferX directory structure
   - ['sudo', 'mkdir', '-p', '/opt/inferx/cache']
   - ['sudo', 'mkdir', '-p', '/opt/inferx/snapshot']
   - ['sudo', 'mkdir', '-p', '/opt/inferx/work']
@@ -137,7 +141,7 @@ runcmd:
   - ['sudo', 'mkdir', '-p', '/opt/inferx/run']
   - ['sudo', 'mkdir', '-p', '/ephemeral/inferx/dind']
 
-  # 10. Create systemd mount unit for MinIO cache bucket
+  # 11. Create systemd mount unit for MinIO cache bucket
   - |
       #!/bin/bash
       cat <<'EOF' | sudo tee /etc/systemd/system/opt-inferx-cache.mount
@@ -156,7 +160,7 @@ runcmd:
       WantedBy=multi-user.target
       EOF
 
-  # 11. Create systemd mount unit for MinIO snapshots bucket
+  # 12. Create systemd mount unit for MinIO snapshots bucket
   - |
       #!/bin/bash
       cat <<'EOF' | sudo tee /etc/systemd/system/opt-inferx-snapshot.mount
@@ -175,7 +179,7 @@ runcmd:
       WantedBy=multi-user.target
       EOF
 
-  # 12. Create MinIO credentials file for goofys
+  # 13. Create MinIO credentials file for goofys
   - |
       #!/bin/bash
       # Wait for k3s to be ready and MinIO service to be available
@@ -191,7 +195,7 @@ runcmd:
 
       sudo chmod 600 /root/.aws/credentials
 
-  # 13. Enable and start MinIO mounts (will auto-mount after network is ready)
+  # 14. Enable and start MinIO mounts (will auto-mount after network is ready)
   - ['sudo', 'systemctl', 'daemon-reload']
   - ['sudo', 'systemctl', 'enable', 'opt-inferx-cache.mount']
   - ['sudo', 'systemctl', 'enable', 'opt-inferx-snapshot.mount']
