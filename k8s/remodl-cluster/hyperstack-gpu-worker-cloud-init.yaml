@@ -78,10 +78,18 @@ runcmd:
       echo "  - \"node-labels=nvlink=${NVLINK}\"" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
       echo "  - \"register-with-taints=nvidia.com/gpu=true:NoSchedule\"" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
 
-  # 7. Install and join k3s cluster with generated node name
+  # 7. Create Tailscale route service for cross-zone routing
   - |
       #!/bin/bash
-      # Wait for k3s config to be created
+      printf '[Unit]\nDescription=Route Tailscale subnet via tailscale0\nAfter=tailscaled.service network-online.target\nWants=tailscaled.service\n\n[Service]\nType=oneshot\nExecStartPre=/bin/sleep 5\nExecStart=/bin/bash -c "/sbin/ip route add 100.64.0.0/10 dev tailscale0 || true"\nRemainAfterExit=yes\nExecStop=/bin/bash -c "/sbin/ip route del 100.64.0.0/10 dev tailscale0 || true"\n\n[Install]\nWantedBy=multi-user.target\n' | sudo tee /etc/systemd/system/tailscale-route.service > /dev/null
+      sudo systemctl daemon-reload
+      sudo systemctl enable tailscale-route.service
+      sudo systemctl start tailscale-route.service
+      echo "Tailscale route service created and enabled"
+
+  # 8. Join k3s cluster with generated node name
+  - |
+      #!/bin/bash
       sleep 2
 
       # Get GPU info from the config we just created
@@ -96,13 +104,17 @@ runcmd:
 
       echo "Joining k3s cluster as node: ${NODE_NAME}"
 
+      # Add node-name to config.yaml
+      echo "node-name: ${NODE_NAME}" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
+
       # Install k3s agent and join cluster
-      # Note: K3S_URL points to control plane Tailscale IP for initial join
-      # After cloud-init, manually rejoin with external IP flags for cross-cloud (see LEARNINGS.md)
-      # DO NOT USE '--node-id' as this will create a random node id and break the cluster.
-      curl -sfL https://get.k3s.io | K3S_URL=https://100.65.227.120:6443 \
-      K3S_TOKEN=K10f34afe5ee273ea04d1d3ad746e1b19ae135b1cf27b10d396ad9f0436a81819c8::server:a0386b56edc4a846e2a085b7920b6d89 \
-      INSTALL_K3S_EXEC="--docker --node-name=${NODE_NAME}" sh -
+      # All configuration is in /etc/rancher/k3s/config.yaml
+      curl -sfL https://get.k3s.io | \
+        K3S_URL=https://100.65.227.120:6443 \
+        K3S_TOKEN=K10f34afe5ee273ea04d1d3ad746e1b19ae135b1cf27b10d396ad9f0436a81819c8::server:a0386b56edc4a846e2a085b7920b6d89 \
+        sh -s - agent --docker
+
+      echo "Node ${NODE_NAME} joined successfully"
 
   # 8. Install goofys for MinIO S3 bucket mounting
   - |
