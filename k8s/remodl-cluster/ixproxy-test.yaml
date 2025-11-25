@@ -166,7 +166,7 @@ spec:
             path: /var/run/docker/runtime-runc/moby/
         - name: dind
           hostPath:
-            path: /opt/inferx/dind
+            path: /ephemeral/inferx/dind
         - name: opt-inferx-run
           hostPath:
             path: /opt/inferx/run

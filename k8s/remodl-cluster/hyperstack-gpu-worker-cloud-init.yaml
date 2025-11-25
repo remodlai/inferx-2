@@ -9,7 +9,7 @@ runcmd:
   - ['sh', '-c', 'curl -fsSL https://tailscale.com/install.sh | sudo sh']
 
   # 2. Authenticate Tailscale
-  - ['sudo', 'tailscale', 'up', '--auth-key=tskey-auth-kvpjzfEAVW11CNTRL-zNQhTGW5MriFtR8XtBLTrie9o9eUrH3DU', '--ssh']
+  - ['sudo', 'tailscale', 'up', '--auth-key=tskey-auth-kLpaaau9Vc11CNTRL-fysPfdLK7V1tCC5UmZ8DV1HqEznKWeUy', '--ssh']
 
 
 
@@ -53,13 +53,23 @@ runcmd:
         NVLINK="false"
       fi
 
+      # Get VPC IP from ens3
+      VPC_IP=$(ip -4 addr show ens3 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
+
+      echo "VPC IP: ${VPC_IP}"
+      echo "Tailscale IP: ${TAILSCALE_IP}"
+      echo "GPU type: ${GPU_TYPE}, count: ${GPU_COUNT}, nvlink: ${NVLINK}"
+
       # Create k3s config directory
       sudo mkdir -p /etc/rancher/k3s
 
-      # Create k3s config.yaml
-      echo "node-ip: ${TAILSCALE_IP}" | sudo tee /etc/rancher/k3s/config.yaml > /dev/null
-      echo "flannel-iface: tailscale0" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
+      # Create k3s config.yaml with dual IPs and VPC networking
+      echo "node-external-ip: ${TAILSCALE_IP}" | sudo tee /etc/rancher/k3s/config.yaml > /dev/null
+      echo "flannel-iface: ens3" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
       echo "kubelet-arg:" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
+      echo "  - \"node-labels=topology.kubernetes.io/zone=hyperstack\"" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
+      echo "  - \"node-labels=topology.kubernetes.io/region=hyperstack\"" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
+      echo "  - \"node-labels=node.kubernetes.io/instance-type=gpu\"" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
       echo "  - \"node-labels=inferx_nodeType=inferx_file\"" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
       echo "  - \"node-labels=inferx_storage=data\"" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
       echo "  - \"node-labels=cloud=hyperstack\"" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
@@ -67,8 +77,6 @@ runcmd:
       echo "  - \"node-labels=gpu.count=${GPU_COUNT}\"" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
       echo "  - \"node-labels=nvlink=${NVLINK}\"" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
       echo "  - \"register-with-taints=nvidia.com/gpu=true:NoSchedule\"" | sudo tee -a /etc/rancher/k3s/config.yaml > /dev/null
-
-      echo "k3s config created with GPU type: ${GPU_TYPE}, count: ${GPU_COUNT}, nvlink: ${NVLINK}"
 
   # 7. Install and join k3s cluster with generated node name
   - |
@@ -95,4 +103,83 @@ runcmd:
       curl -sfL https://get.k3s.io | K3S_URL=https://100.65.227.120:6443 \
       K3S_TOKEN=K10f34afe5ee273ea04d1d3ad746e1b19ae135b1cf27b10d396ad9f0436a81819c8::server:a0386b56edc4a846e2a085b7920b6d89 \
       INSTALL_K3S_EXEC="--docker --node-name=${NODE_NAME}" sh -
-      
+
+  # 8. Install goofys for MinIO S3 bucket mounting
+  - |
+      #!/bin/bash
+      echo "Installing goofys..."
+
+      # Download and install goofys
+      wget https://github.com/kahing/goofys/releases/latest/download/goofys -O /tmp/goofys
+      sudo install /tmp/goofys /usr/local/bin/
+      rm /tmp/goofys
+
+      echo "goofys installed successfully"
+
+  # 9. Create InferX directory structure
+  - ['sudo', 'mkdir', '-p', '/opt/inferx/cache']
+  - ['sudo', 'mkdir', '-p', '/opt/inferx/snapshot']
+  - ['sudo', 'mkdir', '-p', '/opt/inferx/work']
+  - ['sudo', 'mkdir', '-p', '/opt/inferx/log']
+  - ['sudo', 'mkdir', '-p', '/opt/inferx/data']
+  - ['sudo', 'mkdir', '-p', '/opt/inferx/run']
+  - ['sudo', 'mkdir', '-p', '/ephemeral/inferx/dind']
+
+  # 10. Create systemd mount unit for MinIO cache bucket
+  - |
+      #!/bin/bash
+      cat <<'EOF' | sudo tee /etc/systemd/system/opt-inferx-cache.mount
+      [Unit]
+      Description=Mount MinIO Hyperstack cache bucket
+      After=network-online.target
+      Wants=network-online.target
+
+      [Mount]
+      What=minio-hyperstack#cache
+      Where=/opt/inferx/cache
+      Type=goofys
+      Options=_netdev,allow_other,--endpoint=https://minio.minio-hyperstack.svc.cluster.local,--stat-cache-ttl=1m0s,--type-cache-ttl=1m0s
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+
+  # 11. Create systemd mount unit for MinIO snapshots bucket
+  - |
+      #!/bin/bash
+      cat <<'EOF' | sudo tee /etc/systemd/system/opt-inferx-snapshot.mount
+      [Unit]
+      Description=Mount MinIO Hyperstack snapshots bucket
+      After=network-online.target
+      Wants=network-online.target
+
+      [Mount]
+      What=minio-hyperstack#snapshots
+      Where=/opt/inferx/snapshot
+      Type=goofys
+      Options=_netdev,allow_other,--endpoint=https://minio.minio-hyperstack.svc.cluster.local,--stat-cache-ttl=1m0s,--type-cache-ttl=1m0s
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+
+  # 12. Create MinIO credentials file for goofys
+  - |
+      #!/bin/bash
+      # Wait for k3s to be ready and MinIO service to be available
+      echo "Waiting for MinIO service to be available..."
+
+      # Create credentials file
+      sudo mkdir -p /root/.aws
+      cat <<'EOF' | sudo tee /root/.aws/credentials
+      [default]
+      aws_access_key_id = admin
+      aws_secret_access_key = InferX-MinIO-Hyperstack-2025
+      EOF
+
+      sudo chmod 600 /root/.aws/credentials
+
+  # 13. Enable and start MinIO mounts (will auto-mount after network is ready)
+  - ['sudo', 'systemctl', 'daemon-reload']
+  - ['sudo', 'systemctl', 'enable', 'opt-inferx-cache.mount']
+  - ['sudo', 'systemctl', 'enable', 'opt-inferx-snapshot.mount']
