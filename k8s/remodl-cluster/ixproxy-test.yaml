@@ -21,15 +21,13 @@ spec:
           effect: NoSchedule
       containers:
         - name: ixproxy
-          image: inferx/inferx_na:${VERSION}
+          image: remodlai/inferx_na:v0.1.5.beta17-s3ql
           imagePullPolicy: IfNotPresent
-          livenessProbe:
-            httpGet:
-              path: /
-              port: 1240
+          livenessProbe:          # <-- Kubernetes keepalive check
+            exec:
+              command: ["sh", "-c", "ps aux | grep -v grep | grep -q './na'"]
             initialDelaySeconds: 6
             periodSeconds: 10
-            timeoutSeconds: 2
             failureThreshold: 3
           securityContext:
             privileged: true
@@ -54,7 +52,7 @@ spec:
           - name: TRANSFORMERS_CACHE
             value: "/opt/inferx/cache/hub"
           - name: STATESVC_ADDR
-            value: "http://statesvc:1237"
+            value: "http://100.113.55.83:1237"
           - name: RUN_SERVICE
             value: "IxProxy"
           - name: ENABLE_COREDUMP

@@ -1,0 +1,100 @@
+# Dockerfile.s3ql
+# Extends upstream inferx_na image with S3QL filesystem support
+# Base: inferx/inferx_na:v0.1.5.beta17
+# Output: remodlai/inferx_na:v0.1.5.beta17-s3ql
+
+FROM inferx/inferx_na:v0.1.5.beta17
+
+# Install S3QL dependencies and uv package manager
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        # FUSE support
+        libfuse3-dev \
+        fuse3 \
+        # S3QL build dependencies
+        libsqlite3-dev \
+        pkg-config \
+        build-essential \
+        python3-dev \
+        python3-pip \
+        python3-venv \
+        # Utilities
+        curl \
+        ca-certificates \
+        git \
+        wget \
+    && \
+    # Install uv (fast Python package manager)
+    curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    # Cleanup
+    rm -rf /var/lib/apt/lists/*
+
+# Make uv available in PATH for subsequent RUN commands
+ENV PATH="/root/.cargo/bin:$PATH"
+
+# Install S3QL and HuggingFace Hub
+WORKDIR /tmp
+RUN curl -L https://github.com/s3ql/s3ql/releases/download/s3ql-5.4.1/s3ql-5.4.1.tar.gz -o s3ql-5.4.1.tar.gz && \
+    tar -xzf s3ql-5.4.1.tar.gz && \
+    cd s3ql-5.4.1 && \
+    python3 -m venv /opt/s3ql-venv && \
+    /opt/s3ql-venv/bin/pip install --upgrade pip && \
+    /opt/s3ql-venv/bin/pip install . && \
+    # Install HuggingFace Hub for model management
+    /opt/s3ql-venv/bin/pip install huggingface-hub && \
+    # Create symlinks for s3ql commands
+    ln -s /opt/s3ql-venv/bin/mkfs.s3ql /usr/local/bin/mkfs.s3ql && \
+    ln -s /opt/s3ql-venv/bin/mount.s3ql /usr/local/bin/mount.s3ql && \
+    ln -s /opt/s3ql-venv/bin/umount.s3ql /usr/local/bin/umount.s3ql && \
+    ln -s /opt/s3ql-venv/bin/fsck.s3ql /usr/local/bin/fsck.s3ql && \
+    ln -s /opt/s3ql-venv/bin/s3qlcp /usr/local/bin/s3qlcp && \
+    ln -s /opt/s3ql-venv/bin/s3qlctrl /usr/local/bin/s3qlctrl && \
+    ln -s /opt/s3ql-venv/bin/s3qllock /usr/local/bin/s3qllock && \
+    ln -s /opt/s3ql-venv/bin/s3qlrm /usr/local/bin/s3qlrm && \
+    ln -s /opt/s3ql-venv/bin/s3qlstat /usr/local/bin/s3qlstat && \
+    # Cleanup
+    cd / && rm -rf /tmp/s3ql-5.4.1 /tmp/s3ql-5.4.1.tar.gz
+
+# Install MinIO client (mc)
+RUN curl -L https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc && \
+    chmod +x /usr/local/bin/mc
+
+# Create S3QL config directory
+RUN mkdir -p /root/.s3ql
+
+# Create S3QL SSL initialization script (runs at pod startup)
+RUN printf '#!/bin/bash\n\
+# Configure SSL certificates for S3QL to trust MinIO (k3s self-signed certs)\n\
+set -e\n\
+CERTIFI_BUNDLE="/opt/s3ql-venv/lib/python3.8/site-packages/certifi/cacert.pem"\n\
+K3S_CA="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"\n\
+if [ -f "$K3S_CA" ]; then\n\
+    echo "[S3QL] Configuring SSL certificates from k3s CA..."\n\
+    cat "$K3S_CA" > "$CERTIFI_BUNDLE"\n\
+    echo "[S3QL] SSL certificates configured"\n\
+else\n\
+    echo "[S3QL] WARNING: k3s CA not found - S3QL may fail with SSL errors"\n\
+fi\n' > /usr/local/bin/init-s3ql-ssl.sh && \
+    chmod +x /usr/local/bin/init-s3ql-ssl.sh
+
+# Verify installations (mc only - S3QL needs Python 3.12 which works at runtime)
+RUN mc --version && \
+    python3 --version && \
+    echo "Dependencies installed: Python 3.12, S3QL, MinIO client, HuggingFace Hub"
+
+# Add uv and S3QL to PATH
+ENV PATH="/root/.cargo/bin:/opt/s3ql-venv/bin:$PATH"
+
+# Return to original working directory
+WORKDIR /
+
+# Labels
+LABEL maintainer="Remodl AI Infrastructure Team"
+LABEL description="InferX NodeAgent with S3QL filesystem support and Python 3.12"
+LABEL base-image="inferx/inferx_na:v0.1.5.beta17"
+LABEL python-version="3.8"
+LABEL s3ql-version="5.4.1"
+LABEL huggingface-hub="installed"
+
+# Note: Run /usr/local/bin/init-s3ql-ssl.sh before using S3QL to configure SSL certs
+# Original inferx_na entrypoint preserved

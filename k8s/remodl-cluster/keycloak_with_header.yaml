@@ -13,7 +13,7 @@ spec:
         app: keycloak
     spec:
       nodeSelector:
-        inferx-keycloak: "true"
+        cloud: "aws"
       containers:
         - name: keycloak
           image: quay.io/keycloak/keycloak:26.0.7

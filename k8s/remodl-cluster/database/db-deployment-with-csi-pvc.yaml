@@ -28,7 +28,7 @@ spec:
         inferx-postgres: "true"      
       containers:
         - name: postgres
-          image: inferx/inferx_postgres:${VERSION}
+          image: inferx/inferx_postgres:v0.1.5.beta17
           imagePullPolicy: IfNotPresent
           env:
             - name: POSTGRES_USER

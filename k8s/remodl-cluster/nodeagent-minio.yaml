@@ -27,7 +27,7 @@ spec:
             runAsGroup: 0
           env:
           - name: STATESVC_ADDR
-            value: "http://100.113.55.83:1237"
+            value: "http://statesvc:1237"
           - name: RUN_SERVICE
             value: "NodeAgent"
           - name: POD_IP
@@ -173,7 +173,7 @@ spec:
           env:
           
           - name: STATESVC_ADDR
-            value: "http://100.113.55.83:1237"
+            value: "http://statesvc:1237"
           - name: RUN_SERVICE
             value: "NodeAgent"
           - name: ENABLE_COREDUMP

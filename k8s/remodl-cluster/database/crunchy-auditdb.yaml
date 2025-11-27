@@ -1,0 +1,73 @@
+apiVersion: postgres-operator.crunchydata.com/v1beta1
+kind: PostgresCluster
+metadata:
+  name: auditdb-pg
+  namespace: default
+spec:
+  postgresVersion: 17
+  instances:
+    - name: aws
+      replicas: 1
+      dataVolumeClaimSpec:
+        storageClassName: ebs-csi-default-sc
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 20Gi
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: topology.kubernetes.io/zone
+                    operator: In
+                    values:
+                      - us-east-1a
+                      - us-east-1f
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  postgres-operator.crunchydata.com/cluster: auditdb-pg
+              topologyKey: kubernetes.io/hostname
+    - name: hyperstack
+      replicas: 1
+      dataVolumeClaimSpec:
+        storageClassName: csi-hyperstack-inferx
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 20Gi
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: cloud
+                    operator: In
+                    values:
+                      - hyperstack
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+  users:
+    - name: audituser
+      databases:
+        - auditdb
+  backups:
+    pgbackrest:
+      configuration:
+        - secret:
+            name: pgo-s3-creds
+      global:
+        repo1-retention-full: "14"
+        repo1-s3-region: us-east-1
+      repos:
+        - name: repo1
+          s3:
+            bucket: inferx-postgres-backups
+            endpoint: s3.amazonaws.com
+            region: us-east-1

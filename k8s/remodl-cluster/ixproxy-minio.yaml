@@ -21,13 +21,15 @@ spec:
           effect: NoSchedule
       containers:
         - name: ixproxy
-          image: inferx/inferx_na:${VERSION}
+          image: remodlai/inferx_na:v0.1.5.beta17-s3ql
           imagePullPolicy: IfNotPresent
-          livenessProbe:          # <-- Kubernetes keepalive check
-            exec:
-              command: ["sh", "-c", "ps aux | grep -v grep | grep -q './na'"]
-            initialDelaySeconds: 6
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 1240
+            initialDelaySeconds: 60
             periodSeconds: 10
+            timeoutSeconds: 5
             failureThreshold: 3
           securityContext:
             privileged: true
@@ -36,8 +38,21 @@ spec:
             runAsUser: 0
             runAsGroup: 0
           env:
-          - name: CUDA_VISIBLE_DEVICES
-            value: "0"  # Manually set if not auto-set
+          # - name: CUDA_VISIBLE_DEVICES
+          #   value: "0"
+          # HuggingFace Token
+          - name: HF_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: hf-secret
+                key: token
+          # HuggingFace Cache Path
+          - name: HF_HOME
+            value: "/opt/inferx/cache/hub"
+          - name: HF_HUB_CACHE
+            value: "/opt/inferx/cache/hub"
+          - name: TRANSFORMERS_CACHE
+            value: "/opt/inferx/cache/hub"
           - name: STATESVC_ADDR
             value: "http://statesvc:1237"
           - name: RUN_SERVICE
@@ -67,7 +82,7 @@ spec:
           - name: ENABLE_2MB_PAGE
             value: "false"  
           - name: CONTEXT_OVERHEAD
-            value: "1500"   
+            value: "2000"   
           - name: CONTEXT_COUNT
             value: "1"      
           - name: ALLOC_CPU
@@ -79,12 +94,12 @@ spec:
             value: "false"                     
           resources:
             requests:
-              cpu: "10"
-              memory: "10Gi"              # Regular memory request (RAM)
+              cpu: "3"
+              memory: "10Gi"
               hugepages-2Mi: "0" 
             limits:
               cpu: "20"
-              memory: "50Gi"              # Regular memory request (RAM)
+              memory: "100Gi"
               hugepages-2Mi: "0" 
               #nvidia.com/gpu: 1
           volumeMounts:
@@ -94,12 +109,8 @@ spec:
               name: dev-hugepages
             - name: shm
               mountPath: /dev/shm
-            # - mountPath: /opt/inferx/
-            #   name: opt-inferx
-           
-            #   name: opt-inferx-config
-            - mountPath: /opt/inferx/bin
-              name: opt-inferx-bin
+            # - mountPath: /opt/inferx/bin
+            #   name: opt-inferx-bin
             - mountPath: /opt/inferx/work
               name: opt-inferx-work
             - mountPath: /opt/inferx/log
@@ -138,9 +149,9 @@ spec:
         - name: opt-inferx-work
           hostPath:
             path: /opt/inferx/work
-        - name: opt-inferx-bin
-          hostPath:
-            path: /opt/inferx/bin
+        # - name: opt-inferx-bin
+        #   hostPath:
+        #     path: /opt/inferx/bin
         - name: opt-inferx-cache
           hostPath:
             path: /opt/inferx/cache
@@ -155,7 +166,7 @@ spec:
             path: /var/run/docker/runtime-runc/moby/
         - name: dind
           hostPath:
-            path: /opt/inferx/dind
+            path: /ephemeral/inferx/dind
         - name: opt-inferx-run
           hostPath:
             path: /opt/inferx/run

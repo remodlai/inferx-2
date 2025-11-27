@@ -33,9 +33,9 @@ spec:
           - name: RUN_SERVICE
             value: "Scheduler"
           - name: STATESVC_ADDR
-            value: "http://statesvc:1237"
+            value: "http://100.113.55.83:1237"
           - name: ETCD_ADDRS
-            value: "http://etcd:2379"
+            value: "http://100.126.182.57:2379"
           - name: SCHEDULER_PORT
             value: "1238"
           volumeMounts:
