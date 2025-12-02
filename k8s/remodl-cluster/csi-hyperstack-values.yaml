@@ -1,0 +1,17 @@
+hyperstack:
+  apiKey: "e6789ccb-2410-4be4-94df-7934fbc4a602"
+  apiAddress: "https://infrahub-api.nexgencloud.com/v1"
+  clusterId: "inferx-ev"
+
+nodeSelector:
+  cloud: hyperstack
+
+tolerations:
+- key: nvidia.com/gpu
+  operator: Exists
+  effect: NoSchedule
+
+components:
+  csiHyperstack:
+    image: remodlai/csi-hyperstack
+    tag: v0.0.6-remodl2
