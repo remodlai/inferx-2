@@ -2,9 +2,9 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: gateway
-  namespace: monitor                # must match Prometheus namespace
+  namespace: cattle-monitoring-system  # must match Prometheus namespace
   labels:
-    release: prometheus        # must match Prometheus label
+    release: rancher-monitoring        # must match Prometheus label
 spec:
   selector:
     matchLabels:
@@ -41,5 +41,5 @@ roleRef:
   name: prometheus-service-monitor
 subjects:
 - kind: ServiceAccount
-  name: prometheus-kube-prometheus-prometheus
-  namespace: monitor
+  name: rancher-monitoring-prometheus
+  namespace: cattle-monitoring-system

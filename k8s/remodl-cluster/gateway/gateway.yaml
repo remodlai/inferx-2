@@ -16,11 +16,11 @@ spec:
         app: gateway
     spec:
       nodeSelector:
-        inferx-gateway: "true"
+        inferx-cpu-worker: "true"
       hostPID: true
       containers:
         - name: gateway
-          image: inferx/inferx_platform:${VERSION}
+          image: inferx/inferx_platform:v0.1.5.beta17
           imagePullPolicy: IfNotPresent
           livenessProbe:          # <-- Kubernetes keepalive check
             httpGet:
@@ -41,12 +41,10 @@ spec:
             value: "Gateway"
           - name: INFERX_ADMIN_APIKEY
             value: 87831cdb-d07a-4dc1-9de0-fb232c9bf286
-          - name: AUDITDB_ADDR
-            value: "postgresql://audit_user:123456@100.104.25.127:5432/auditdb"
           - name: STATESVC_ADDR
-            value: "http://100.113.55.83:1237"
+            value: "http://statesvc:1237"
           - name: ETCD_ADDRS
-            value: "http://100.126.182.57:2379"
+            value: "http://etcd:2379"
           volumeMounts:
             - mountPath: /opt/inferx/log
               name: opt-inferx-log

@@ -14,14 +14,14 @@ spec:
         app: ixproxy
     spec:
       nodeSelector:
-        cloud: "hyperstack"
+        inferx-gpu-worker: "true"
       tolerations:
         - key: nvidia.com/gpu
           operator: Exists
           effect: NoSchedule
       containers:
         - name: ixproxy
-          image: remodlai/inferx_na:v0.1.5.beta17-s3ql
+          image: inferx/inferx_na:v0.1.5.beta17
           imagePullPolicy: IfNotPresent
           livenessProbe:          # <-- Kubernetes keepalive check
             exec:
@@ -52,7 +52,9 @@ spec:
           - name: TRANSFORMERS_CACHE
             value: "/opt/inferx/cache/hub"
           - name: STATESVC_ADDR
-            value: "http://100.113.55.83:1237"
+            value: "http://statesvc:1237"
+          - name: ETCD_ADDRS
+            value: "http://etcd:2379"
           - name: RUN_SERVICE
             value: "IxProxy"
           - name: ENABLE_COREDUMP

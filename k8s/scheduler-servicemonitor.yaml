@@ -2,9 +2,9 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: scheduler
-  namespace: monitor                # must match Prometheus namespace
+  namespace: cattle-monitoring-system  # must match Prometheus namespace
   labels:
-    release: prometheus        # must match Prometheus label
+    release: rancher-monitoring        # must match Prometheus label
 spec:
   selector:
     matchLabels:

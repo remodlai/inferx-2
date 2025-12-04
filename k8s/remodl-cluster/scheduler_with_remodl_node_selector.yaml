@@ -15,7 +15,7 @@ spec:
         app: scheduler
     spec:
       nodeSelector:
-        inferx-scheduler: "true"
+        inferx-gpu-worker: "true"
       tolerations:
         - key: nvidia.com/gpu
           operator: Exists
@@ -23,7 +23,7 @@ spec:
       hostPID: true
       containers:
         - name: scheduler
-          image: inferx/inferx_platform:${VERSION}
+          image: inferx/inferx_platform:v0.1.5.beta17
           imagePullPolicy: IfNotPresent
           env:
           - name: POD_IP
@@ -33,9 +33,9 @@ spec:
           - name: RUN_SERVICE
             value: "Scheduler"
           - name: STATESVC_ADDR
-            value: "http://100.113.55.83:1237"
+            value: "http://statesvc:1237"
           - name: ETCD_ADDRS
-            value: "http://100.126.182.57:2379"
+            value: "http://etcd:2379"
           - name: SCHEDULER_PORT
             value: "1238"
           volumeMounts:

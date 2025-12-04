@@ -15,20 +15,20 @@ spec:
         app: inferx-dashboard
     spec:
       nodeSelector:
-        inferx-dashboard: "true"
+        inferx-cpu-worker: "true"
       containers:
         - name: inferx-dashboard
           image: remodlai/inferx-dashboard:v0.1.5-custom-v9
           imagePullPolicy: Always
           env:
             - name: KEYCLOAK_URL
-              value: "http://keycloak:8080/authn"
+              value: "https://model-gateway.remodl.ai/authn"
             - name: KEYCLOAK_REALM_NAME
               value: "inferx"
             - name: KEYCLOAK_CLIENT_ID
               value: "infer_client"
             - name: KEYCLOAK_CLIENT_SECRET
-              value: "8ltBwcxokVy3fQtsxHYhmrgLv4BtiAmQ"
+              value: "N00QgrdKyVYLaYCKB9dLvotOJGRKI6EY"
             - name: INFERX_APIGW_ADDR
               value: "http://gateway:4000"
           volumeMounts:

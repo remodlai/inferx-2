@@ -156,17 +156,17 @@ runkblob:
 	sudo kubectl apply -f k8s/scheduler-servicemonitor.yaml
 	# sudo kubectl apply -f k8s/spdk.yaml
 	sudo kubectl apply -f k8s/jaeger.yaml
-	sudo kubectl apply -f k8s/etcd.yaml
+	sudo kubectl apply -f k8s/remodl-cluster/etcd/etcd-with-pvc.yaml
 	sudo kubectl apply -f k8s/keycloak_postgres.yaml
-	sudo kubectl apply -f k8s/keycloak.yaml
-	VERSION=$(VERSION) envsubst < k8s/secretdb.yaml | sudo kubectl apply -f -
-	VERSION=$(VERSION) envsubst < k8s/db-deployment.yaml | sudo kubectl apply -f -
-	VERSION=$(VERSION) envsubst < k8s/statesvc.yaml | sudo kubectl apply -f -
-	VERSION=$(VERSION) envsubst < k8s/gateway.yaml | sudo kubectl apply -f -
-	VERSION=$(VERSION) envsubst < k8s/scheduler.yaml | sudo kubectl apply -f -
-	# VERSION=$(VERSION) envsubst < k8s/ixproxy.yaml | sudo kubectl apply -f -
-	# VERSION=$(VERSION) envsubst < k8s/nodeagent.yaml | sudo kubectl apply -f -
-	VERSION=$(VERSION) envsubst < k8s/dashboard.yaml | sudo kubectl apply -f -
+	sudo kubectl apply -f k8s/remodl-cluster/keycloak_with_header.yaml
+	#VERSION=$(VERSION) envsubst < k8s/secretdb.yaml | sudo kubectl apply -f -
+	#VERSION=$(VERSION) envsubst < k8s/db-deployment.yaml | sudo kubectl apply -f -
+	kubectl apply -f k8s/remodl-cluster/statesvc/statesvc.yaml | sudo kubectl apply -f -
+	kubectl apply -f k8s/remodl-cluster/gateway/gateway.yaml | kubectl apply -f -
+	kubectl apply -f k8s/remodl-cluster/scheduler/scheduler_with_remodl_node_selector.yaml 
+	VERSION=v0.1.15.beta17 envsubst < k8s/remodl-cluster/ixproxy-test.yaml |  kubectl apply -f -
+	VERSION=v0.1.15.beta17 envsubst < k8s/remodl-cluster/nodeagent.yaml | kubectl apply -f -
+	kubectl apply -f k8s/remodl-cluster/dashboard/dashboard.yaml
 	# sudo kubectl apply -f k8s/dashboard.yaml
 	sudo kubectl apply -f k8s/ingress.yaml
 stopall:

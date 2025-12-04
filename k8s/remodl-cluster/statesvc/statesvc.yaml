@@ -15,7 +15,7 @@ spec:
         app: statesvc
     spec:
       nodeSelector:
-        inferx-statesvc: "true"
+        inferx-cpu-worker: "true"
       hostPID: true
       containers:
         - name: statesvc
@@ -25,7 +25,7 @@ spec:
           - name: POD_IP
             valueFrom:
               fieldRef:
-                fieldPath: status.podIP          
+                fieldPath: status.podIP
           - name: RUN_SERVICE
             value: "StateSvc"
           - name: STATESVC_PORT

@@ -17,7 +17,7 @@ spec:
         inferx_nodeType: inferx_blob      
       containers:
         - name: nodeagent
-          image: remodlai/inferx_na:v0.1.5.beta16-s3ql
+          image: inferx/inferx_na:v0.1.5.beta17
           imagePullPolicy: IfNotPresent
           securityContext:
             privileged: true
@@ -27,7 +27,7 @@ spec:
             runAsGroup: 0
           env:
           - name: STATESVC_ADDR
-            value: "http://100.113.55.83:1237"
+            value: "http://statesvc:1237"
           - name: RUN_SERVICE
             value: "NodeAgent"
           - name: POD_IP
@@ -162,7 +162,7 @@ spec:
       #       ]
       containers:
         - name: nodeagent
-          image: remodlai/inferx_na:v0.1.5.beta16-s3ql
+          image: inferx/inferx_na:v0.1.5.beta17
           imagePullPolicy: IfNotPresent
           securityContext:
             privileged: true
@@ -173,7 +173,7 @@ spec:
           env:
           
           - name: STATESVC_ADDR
-            value: "http://100.113.55.83:1237"
+            value: "http://statesvc:1237"
           - name: RUN_SERVICE
             value: "NodeAgent"
           - name: ENABLE_COREDUMP
