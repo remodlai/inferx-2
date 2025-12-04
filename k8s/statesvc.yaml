@@ -31,7 +31,7 @@ spec:
           volumeMounts:
             - mountPath: /opt/inferx/log
               name: opt-inferx-log
-          command: ["./svc", "/opt/inferx/config/node.json"]
+          #command: ["./svc", "/opt/inferx/config/node.json"]
       volumes:
         - name: opt-inferx-log
           hostPath:

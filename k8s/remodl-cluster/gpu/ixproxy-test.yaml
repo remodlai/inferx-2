@@ -24,12 +24,10 @@ spec:
           image: inferx/inferx_na:v0.1.5.beta17
           imagePullPolicy: IfNotPresent
           livenessProbe:          # <-- Kubernetes keepalive check
-            httpGet:
-              path: /
-              port: 1240
-            initialDelaySeconds: 6    # wait before first probe
-            periodSeconds: 10         # ping every 10s
-            timeoutSeconds: 2         # fail if no response in 2s
+            exec:
+              command: ["sh", "-c", "ps aux | grep -v grep | grep -q './na'"]
+            initialDelaySeconds: 6
+            periodSeconds: 10
             failureThreshold: 3
           securityContext:
             privileged: true
@@ -47,16 +45,16 @@ spec:
                 name: hf-secret
                 key: token
           # HuggingFace Cache Path
-          # - name: HF_HOME
-          #   value: "/opt/inferx/cache/hub"
-          # - name: HF_HUB_CACHE
-          #   value: "/opt/inferx/cache/hub"
-          # - name: TRANSFORMERS_CACHE
-          #   value: "/opt/inferx/cache/hub"
+          - name: HF_HOME
+            value: "/opt/inferx/cache/hub"
+          - name: HF_HUB_CACHE
+            value: "/opt/inferx/cache/hub"
+          - name: TRANSFORMERS_CACHE
+            value: "/opt/inferx/cache/hub"
           - name: STATESVC_ADDR
             value: "http://statesvc:1237"
-          # - name: ETCD_ADDRS
-          #   value: "http://etcd:2379"
+          - name: ETCD_ADDRS
+            value: "http://etcd:2379"
           - name: RUN_SERVICE
             value: "IxProxy"
           - name: ENABLE_COREDUMP
@@ -111,10 +109,6 @@ spec:
               name: dev-hugepages
             - name: shm
               mountPath: /dev/shm
-            # - mountPath: /opt/inferx/
-            #   name: opt-inferx
-            # - mountPath: /opt/inferx/config
-            #   name: opt-inferx-config
             # - mountPath: /opt/inferx/bin
             #   name: opt-inferx-bin
             - mountPath: /opt/inferx/work
@@ -159,20 +153,20 @@ spec:
         #   hostPath:
         #     path: /opt/inferx/bin
         - name: opt-inferx-cache
-          persistentVolumeClaim:
-            claimName: inferx-cache-v2
+          hostPath:
+            path: /opt/inferx/cache
         - name: opt-inferx-data
           hostPath:
             path: /opt/inferx/data
         - name: opt-inferx-snapshot
-          persistentVolumeClaim:
-            claimName: inferx-snapshot-v2
+          hostPath:
+            path: /opt/inferx/snapshot
         - name: docker-runtime
           hostPath:
             path: /var/run/docker/runtime-runc/moby/
         - name: dind
           hostPath:
-            path: /opt/inferx/dind
+            path: /ephemeral/inferx/dind
         - name: opt-inferx-run
           hostPath:
             path: /opt/inferx/run

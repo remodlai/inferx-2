@@ -14,9 +14,9 @@ spec:
       labels:
         app: statesvc
     spec:
+      hostPID: true
       nodeSelector:
         inferx-cpu-worker: "true"
-      hostPID: true
       containers:
         - name: statesvc
           image: inferx/inferx_platform:v0.1.5.beta17
@@ -33,7 +33,7 @@ spec:
           volumeMounts:
             - mountPath: /opt/inferx/log
               name: opt-inferx-log
-          command: ["./svc", "/opt/inferx/config/node.json"]
+          #command: ["./svc", "/opt/inferx/config/node.json"]
       volumes:
         - name: opt-inferx-log
           hostPath:
