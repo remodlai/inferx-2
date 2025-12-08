@@ -21,6 +21,10 @@ spec:
         - name: statesvc
           image: inferx/inferx_platform:v0.1.5.beta17
           imagePullPolicy: IfNotPresent
+          securityContext:
+            capabilities:
+              add:
+                - SYS_RESOURCE
           env:
           - name: POD_IP
             valueFrom:
