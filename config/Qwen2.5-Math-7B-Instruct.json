@@ -20,7 +20,7 @@
                 "GPU": {
                     "Type": "Any",
                     "Count": 2,
-                    "vRam": 13800
+                    "vRam": 13000
                 }
             },
             "envs": [
@@ -31,6 +31,10 @@
                 [
                     "VLLM_CUDART_SO_PATH",
                     "/usr/local/cuda-12.1/targets/x86_64-linux/lib/libcudart.so.12"
+                ],
+                [
+                    "VLLM_USE_FLASHINFER_SAMPLER",
+                    "0"
                 ]
             ],
             "mounts": [
@@ -57,8 +61,8 @@
             },
             "standby": {
                 "gpu": "Blob",
-                "pageable": "Blob",
-                "pinned": "Blob"
+                "pageable": "File",
+                "pinned": "File"
             }
         }
     }

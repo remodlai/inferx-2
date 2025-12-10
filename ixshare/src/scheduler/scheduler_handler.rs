@@ -15,10 +15,12 @@
 use inferxlib::data_obj::ObjRef;
 use inferxlib::obj_mgr::funcpolicy_mgr::FuncPolicy;
 use inferxlib::obj_mgr::funcpolicy_mgr::FuncPolicySpec;
+use inferxlib::obj_mgr::funcstatus_mgr::FunctionStatus;
 use rand::prelude::SliceRandom;
 use rand::thread_rng;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::collections::BinaryHeap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::ops::Deref;
@@ -34,9 +36,10 @@ use inferxlib::resource::StandbyType;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot::Sender;
 use tokio::sync::Notify;
-use tokio::time::Interval;
+use tokio::time::{Duration, Interval};
 
 use crate::audit::SnapshotScheduleAudit;
+use crate::audit::SqlAudit;
 use crate::audit::POD_AUDIT_AGENT;
 use crate::common::*;
 use crate::gateway::metrics::Nodelabel;
@@ -48,6 +51,7 @@ use crate::na::RemoveSnapshotReq;
 use crate::na::TerminatePodReq;
 use crate::peer_mgr::PeerMgr;
 use crate::scheduler::scheduler::SetIdleSource;
+use crate::scheduler::scheduler::TimedTask;
 use crate::scheduler::scheduler::SCHEDULER_CONFIG;
 use inferxlib::data_obj::DeltaEvent;
 use inferxlib::data_obj::EventType;
@@ -66,6 +70,7 @@ use inferxlib::obj_mgr::node_mgr::Node;
 use inferxlib::resource::Resources;
 
 use super::scheduler::BiIndex;
+use super::scheduler::FuncNodePair;
 use super::scheduler::SchedTask;
 use super::scheduler::SnapshotScheduleInfo;
 use super::scheduler::SnapshotScheduleState;
@@ -394,12 +399,20 @@ impl FuncStatus {
 
                         let gpuCnt = pod.pod.object.spec.reqResources.gpu.gpuCount;
 
+                        let cnt = SCHEDULER_METRICS
+                            .lock()
+                            .await
+                            .usedGpuCnt
+                            .Inc(nodelabel.clone(), gpuCnt);
+
                         SCHEDULER_METRICS
                             .lock()
                             .await
                             .usedGPU
                             .get_or_create(&nodelabel)
-                            .inc_by(gpuCnt as i64);
+                            .set(cnt as i64);
+
+                        error!("user GPU inc {:?} {} {}", &req.funcname, gpuCnt, cnt);
 
                         let peer = match PEER_MGR.LookforPeer(pod.pod.object.spec.ipAddr) {
                             Ok(p) => p,
@@ -454,6 +467,9 @@ pub enum WorkerHandlerMsg {
 
 #[derive(Debug, Default)]
 pub struct SchedulerHandler {
+    // nodename -> nodeEpoch
+    pub nodeEpoch: BTreeMap<String, i64>,
+
     pub pods: BTreeMap<String, WorkerPod>,
 
     /*************** gateways ***************************** */
@@ -470,6 +486,7 @@ pub struct SchedulerHandler {
     /********************function ******************* */
     // funcname --> func
     pub funcs: BTreeMap<String, FuncStatus>,
+    pub funcstatus: BTreeMap<String, FunctionStatus>,
 
     /*********************snapshot ******************* */
     // funcid -> [nodename->SnapshotState]
@@ -496,6 +513,7 @@ pub struct SchedulerHandler {
 
     pub nodeListDone: bool,
     pub funcListDone: bool,
+    pub funcstatusListDone: bool,
     pub funcPodListDone: bool,
     pub snapshotListDone: bool,
     pub funcpolicyDone: bool,
@@ -504,14 +522,36 @@ pub struct SchedulerHandler {
     pub nextWorkId: AtomicU64,
 
     pub taskQueue: TaskQueue,
+
+    delayed_tasks: BinaryHeap<TimedTask>,
+
+    delay_interval: Option<Interval>,
 }
 
 impl SchedulerHandler {
     pub fn New() -> Self {
         return Self {
             nextWorkId: AtomicU64::new(1),
+            delayed_tasks: BinaryHeap::new(),
             ..Default::default()
         };
+    }
+
+    pub fn schedule_delayed_task(&mut self, delay: Duration, task: SchedTask) {
+        let when = Instant::now() + delay;
+        self.delayed_tasks.push(TimedTask { when, task });
+    }
+
+    pub fn drain_due_delayed_tasks(&mut self) {
+        let now = Instant::now();
+        while let Some(entry) = self.delayed_tasks.peek() {
+            if entry.when <= now {
+                let TimedTask { task, .. } = self.delayed_tasks.pop().unwrap();
+                self.taskQueue.AddTask(task);
+            } else {
+                break;
+            }
+        }
     }
 
     pub async fn ProcessRefreshGateway(&mut self, req: na::RefreshGatewayReq) -> Result<()> {
@@ -544,6 +584,29 @@ impl SchedulerHandler {
             match state {
                 WorkerPodState::Working(gatewayId) => {
                     if timeoutGateways.contains(&gatewayId) {
+                        let gpuCnt = worker.pod.object.spec.reqResources.gpu.gpuCount;
+                        let nodelabel = Nodelabel {
+                            nodename: worker.pod.object.spec.nodename.clone(),
+                        };
+
+                        let cnt = SCHEDULER_METRICS
+                            .lock()
+                            .await
+                            .usedGpuCnt
+                            .Dec(nodelabel.clone(), gpuCnt);
+
+                        SCHEDULER_METRICS
+                            .lock()
+                            .await
+                            .usedGPU
+                            .get_or_create(&nodelabel)
+                            .set(cnt as i64);
+
+                        error!(
+                            "user GPU desc timeout {:?} {} {}",
+                            &worker.pod.object.spec.funcname, gpuCnt, cnt
+                        );
+
                         worker.SetIdle(SetIdleSource::ProcessGatewayTimeout);
                         // how to handle the recovered failure gateway?
                         self.idlePods.insert(worker.pod.PodKey());
@@ -612,6 +675,11 @@ impl SchedulerHandler {
 
         for worker in &pods {
             let pod = &worker.pod;
+            error!(
+                "ProcessLeaseWorkerReq pod {:?} state {:?}",
+                pod.PodKey(),
+                worker.State()
+            );
             if pod.object.status.state == PodState::Ready && worker.State().IsIdle() {
                 worker.SetWorking(req.gateway_id);
                 let remove = self.idlePods.remove(&worker.pod.PodKey());
@@ -645,13 +713,20 @@ impl SchedulerHandler {
 
                 let gpuCnt = pod.object.spec.reqResources.gpu.gpuCount;
 
+                let cnt = SCHEDULER_METRICS
+                    .lock()
+                    .await
+                    .usedGpuCnt
+                    .Inc(nodelabel.clone(), gpuCnt);
+
                 SCHEDULER_METRICS
                     .lock()
                     .await
                     .usedGPU
                     .get_or_create(&nodelabel)
-                    .inc_by(gpuCnt as i64);
+                    .set(cnt as i64);
 
+                error!("user GPU inc {:?} {} {}", &req.funcname, gpuCnt, cnt);
                 let resp = na::LeaseWorkerResp {
                     error: String::new(),
                     id: pod.object.spec.id.clone(),
@@ -768,13 +843,20 @@ impl SchedulerHandler {
 
         let gpuCnt = worker.pod.object.spec.reqResources.gpu.gpuCount;
 
+        let cnt = SCHEDULER_METRICS
+            .lock()
+            .await
+            .usedGpuCnt
+            .Dec(nodelabel.clone(), gpuCnt);
+
         SCHEDULER_METRICS
             .lock()
             .await
             .usedGPU
             .get_or_create(&nodelabel)
-            .dec_by(gpuCnt as i64);
+            .set(cnt as i64);
 
+        error!("user GPU desc {:?} {} {}", &req.funcname, gpuCnt, cnt);
         // in case the gateway dead and recover and try to return an out of date pod
         // assert!(
         //     !worker.State().IsIdle(),
@@ -1020,6 +1102,10 @@ impl SchedulerHandler {
         msgRx: &mut mpsc::Receiver<WorkerHandlerMsg>,
         interval: &mut Interval,
     ) -> Result<()> {
+        if self.delay_interval.is_none() {
+            self.delay_interval = Some(tokio::time::interval(Duration::from_millis(100)));
+        }
+        let delay_interval = self.delay_interval.as_mut().unwrap();
         tokio::select! {
             biased;
             m = msgRx.recv() => {
@@ -1043,6 +1129,9 @@ impl SchedulerHandler {
                     error!("scheduler msgRx read fail...");
                     return Err(Error::ProcessDone);
                 }
+            }
+            _ = delay_interval.tick() => {
+                self.drain_due_delayed_tasks();
             }
             _ = interval.tick() => {
                 if self.listDone {
@@ -1068,8 +1157,14 @@ impl SchedulerHandler {
                                         self.taskQueue.AddFunc(&funcid);
                                     }
                                 }
+                                FunctionStatus::KEY => {
+                                    let funcstatus = FunctionStatus::FromDataObject(obj)?;
+                                    let funcid = funcstatus.Id();
+                                    self.funcstatus.insert(funcid, funcstatus);
+                                }
                                 Node::KEY => {
                                     let node = Node::FromDataObject(obj)?;
+                                    self.CheckNodeEpoch(&node.name, node.object.nodeEpoch).await;
                                     let peerIp = ipnetwork::Ipv4Network::from_str(&node.object.nodeIp)
                                         .unwrap()
                                         .ip()
@@ -1092,10 +1187,13 @@ impl SchedulerHandler {
                                 }
                                 FuncPod::KEY => {
                                     let pod = FuncPod::FromDataObject(obj)?;
+                                    self.CheckNodeEpoch(&pod.object.spec.nodename, pod.srcEpoch).await;
+
                                     self.AddPod(pod.clone())?;
                                 }
                                 ContainerSnapshot::KEY => {
                                     let snapshot = FuncSnapshot::FromDataObject(obj)?;
+                                    self.CheckNodeEpoch(&snapshot.object.nodename, snapshot.srcEpoch).await;
                                     self.AddSnapshot(&snapshot)?;
                                 }
                                 FuncPolicy::KEY => {
@@ -1122,6 +1220,11 @@ impl SchedulerHandler {
                                         self.ProcessAddFunc(&fpId).await;
                                         self.taskQueue.AddFunc(&fpId);
                                     }
+                                }
+                                FunctionStatus::KEY => {
+                                    let funcstatus = FunctionStatus::FromDataObject(obj)?;
+                                    let funcid = funcstatus.Id();
+                                    self.funcstatus.insert(funcid, funcstatus);
                                 }
                                 Node::KEY => {
                                     let node = Node::FromDataObject(obj)?;
@@ -1154,6 +1257,11 @@ impl SchedulerHandler {
                                     self.RemoveFunc(spec)?;
 
                                 }
+                                FunctionStatus::KEY => {
+                                    let funcstatus = FunctionStatus::FromDataObject(obj)?;
+                                    let funcid = funcstatus.Id();
+                                    self.funcstatus.remove(&funcid);
+                                }
                                 Node::KEY => {
                                     let node = Node::FromDataObject(obj)?;
                                     let cidr = ipnetwork::Ipv4Network::from_str(&node.object.cidr).unwrap();
@@ -1181,6 +1289,9 @@ impl SchedulerHandler {
                             match &obj.objType as &str {
                                 Function::KEY => {
                                     self.ListDone(ListType::Func).await?;
+                                }
+                                FunctionStatus::KEY => {
+                                    self.ListDone(ListType::FuncStatus).await?;
                                 }
                                 Node::KEY => {
                                     self.ListDone(ListType::Node).await?;
@@ -1377,6 +1488,7 @@ impl SchedulerHandler {
         let mut allocStates = BTreeMap::new();
 
         // go through candidate list to look for node has enough free resource, if so return
+        // TODO may need wait for nodes info to be available
         for nodename in candidateNodes {
             let node = self.nodes.get(nodename).unwrap();
 
@@ -1743,32 +1855,54 @@ impl SchedulerHandler {
         }
     }
 
-    pub fn InitSnapshotTask(&self) -> Result<()> {
-        for (funcId, _) in &self.funcs {
-            for (nodename, _) in &self.nodes {
-                self.taskQueue.AddSnapshotTask(nodename, funcId);
+    pub fn InitSnapshotTask(&mut self) -> Result<()> {
+        let funcIds: Vec<String> = self.funcs.keys().cloned().collect();
+        let nodes: Vec<String> = self.nodes.keys().cloned().collect();
+        for funcId in &funcIds {
+            for nodename in &nodes {
+                self.AddSnapshotTask(nodename, funcId);
             }
         }
 
         return Ok(());
     }
 
+    pub fn AddSnapshotTask(&mut self, nodename: &str, funcId: &str) {
+        self.schedule_delayed_task(
+            Duration::from_secs(1),
+            SchedTask::SnapshotTask(FuncNodePair {
+                nodename: nodename.to_owned(),
+                funcId: funcId.to_owned(),
+            }),
+        );
+    }
+
+    pub fn AddStandbyTask(&mut self, nodename: &str) {
+        self.schedule_delayed_task(
+            Duration::from_secs(1),
+            SchedTask::StandbyTask(nodename.to_owned()),
+        );
+    }
+
     pub async fn ProcessTask(&mut self, task: &SchedTask) -> Result<()> {
-        use tokio::time::{sleep, Duration};
         match task {
             SchedTask::AddNode(nodename) => {
-                // wait until all info of the node be synced
-                // todo: can't block main thread
-                sleep(Duration::from_secs(3)).await;
-                for (funcId, _) in &self.funcs {
-                    self.taskQueue.AddSnapshotTask(nodename, funcId);
+                self.schedule_delayed_task(
+                    Duration::from_secs(3),
+                    SchedTask::DelayedInitNode(nodename.clone()),
+                );
+            }
+            SchedTask::DelayedInitNode(nodename) => {
+                let funcIds: Vec<String> = self.funcs.keys().cloned().collect();
+                for funcId in &funcIds {
+                    self.AddSnapshotTask(nodename, &funcId);
                 }
-                self.taskQueue
-                    .AddTask(SchedTask::StandbyTask(nodename.to_owned()));
+                self.AddStandbyTask(nodename);
             }
             SchedTask::AddFunc(funcId) => {
-                for (nodename, _) in &self.nodes {
-                    self.taskQueue.AddSnapshotTask(nodename, funcId);
+                let nodes: Vec<String> = self.nodes.keys().cloned().collect();
+                for nodename in &nodes {
+                    self.AddSnapshotTask(nodename, funcId);
                 }
             }
             SchedTask::SnapshotTask(p) => {
@@ -1882,6 +2016,28 @@ impl SchedulerHandler {
         }
     }
 
+    pub async fn GetFuncPodCount(
+        &self,
+        tenant: &str,
+        namespace: &str,
+        fpname: &str,
+        fprevision: i64,
+        podtype: &str,
+        nodename: &str,
+    ) -> Result<u64> {
+        let addr = SCHEDULER_CONFIG.auditdbAddr.clone();
+        if addr.len() == 0 {
+            return Err(Error::CommonError(format!(
+                "GetFuncPodCount can't get auditdbAddr"
+            )));
+        }
+        let sqlaudit = SqlAudit::New(&addr).await?;
+
+        return sqlaudit
+            .FuncCount(tenant, namespace, fpname, fprevision, podtype, nodename)
+            .await;
+    }
+
     pub async fn TryCreateSnapshotOnNode(&mut self, funcId: &str, nodename: &str) -> Result<()> {
         match self.snapshots.get(funcId) {
             None => (),
@@ -1911,9 +2067,48 @@ impl SchedulerHandler {
             Some(fpStatus) => fpStatus.func.clone(),
         };
 
-        if func.object.status.state == FuncState::Fail {
-            return Ok(());
+        match self.funcstatus.get(funcId) {
+            None => {
+                error!(
+                    "TryCreateSnapshotOnNode can't get funcstatus for {}",
+                    funcId
+                );
+            }
+            Some(status) => {
+                if status.object.state == FuncState::Fail {
+                    return Ok(());
+                }
+            }
         }
+
+        // let id = FuncId::New(funcId).unwrap();
+
+        // let podCount = match self
+        //     .GetFuncPodCount(
+        //         &func.tenant,
+        //         &func.namespace,
+        //         &func.name,
+        //         id.revision,
+        //         &CreatePodType::Snapshot.String(),
+        //         nodename,
+        //     )
+        //     .await
+        // {
+        //     Err(e) => {
+        //         error!(
+        //             "fail to get func {} snapshot count with error {:?}, will retry ...",
+        //             funcId, e
+        //         );
+        //         self.AddSnapshotTask(nodename, funcId);
+        //         return Ok(());
+        //     }
+        //     Ok(c) => c,
+        // };
+
+        // // there are too many retry snapshot pods. stop retry.
+        // if podCount >= 3 {
+        //     return Ok(());
+        // }
 
         let nodeStatus = match self.nodes.get(nodename) {
             None => return Ok(()),
@@ -1938,7 +2133,7 @@ impl SchedulerHandler {
         }
 
         if nodeStatus.state != NAState::NodeAgentAvaiable {
-            self.taskQueue.AddSnapshotTask(nodename, funcId);
+            self.AddSnapshotTask(nodename, funcId);
 
             return Err(Error::SchedulerNoEnoughResource(
                 "NodAgent node ready".to_owned(),
@@ -1970,7 +2165,7 @@ impl SchedulerHandler {
                         nodename,
                         SnapshotScheduleState::Waiting(format!("Resource is busy")),
                     );
-                    self.taskQueue.AddSnapshotTask(nodename, funcId);
+                    self.AddSnapshotTask(nodename, funcId);
                     return Err(Error::SchedulerNoEnoughResource(s));
                 }
                 Err(e) => return Err(e),
@@ -2007,7 +2202,7 @@ impl SchedulerHandler {
                     nodename,
                     SnapshotScheduleState::ScheduleFail(format!("snapshoting sched fail {:?}", &e)),
                 );
-                self.taskQueue.AddSnapshotTask(nodename, funcId);
+                self.AddSnapshotTask(nodename, funcId);
                 return Err(e);
             }
             Ok(id) => id,
@@ -2085,14 +2280,16 @@ impl SchedulerHandler {
             return Ok(());
         }
 
+        // add another StandbyTask for the node
+        if self.nodes.contains_key(nodename) {
+            self.AddStandbyTask(nodename);
+        }
+
         match self.nodes.get(nodename) {
             None => {
                 return Ok(());
             }
             Some(ns) => {
-                // add another StandbyTask for the node
-                self.taskQueue
-                    .AddTask(SchedTask::StandbyTask(nodename.to_owned()));
                 if ns.pendingPods.len() > 0 {
                     return Ok(());
                 }
@@ -2101,8 +2298,13 @@ impl SchedulerHandler {
 
         let mut funcPodCnt = BTreeMap::new();
         for (funcId, m) in &self.snapshots {
-            if m.contains_key(nodename) {
-                funcPodCnt.insert(funcId.to_owned(), 0);
+            match m.get(nodename) {
+                None => (),
+                Some(snapshot) => {
+                    if snapshot.state == SnapshotState::Ready {
+                        funcPodCnt.insert(funcId.to_owned(), 0);
+                    }
+                }
             }
         }
 
@@ -2643,13 +2845,20 @@ impl SchedulerHandler {
     pub async fn ListDone(&mut self, listType: ListType) -> Result<bool> {
         match listType {
             ListType::Func => self.funcListDone = true,
+            ListType::FuncStatus => self.funcstatusListDone = true,
             ListType::FuncPod => self.funcPodListDone = true,
             ListType::Node => self.nodeListDone = true,
             ListType::Snapshot => self.snapshotListDone = true,
             ListType::Funcpolicy => self.funcpolicyDone = true,
         }
 
-        if self.nodeListDone && self.funcListDone && self.funcPodListDone && self.snapshotListDone {
+        if self.nodeListDone
+            && self.funcListDone
+            && self.funcstatusListDone
+            && self.funcPodListDone
+            && self.snapshotListDone
+            && self.funcpolicyDone
+        {
             self.listDone = true;
 
             self.RefreshScheduling().await?;
@@ -2680,7 +2889,7 @@ impl SchedulerHandler {
             .await
             .totalGPU
             .get_or_create(&nodelabel)
-            .inc_by(gpuCnt as i64);
+            .set(gpuCnt as i64);
 
         let total = node.object.resources.clone();
         let pods = match self.nodePods.remove(&nodeName) {
@@ -2718,14 +2927,7 @@ impl SchedulerHandler {
             nodename: key.clone(),
         };
 
-        let gpuCnt = node.object.resources.gpus.Gpus().len();
-
-        SCHEDULER_METRICS
-            .lock()
-            .await
-            .totalGPU
-            .get_or_create(&nodelabel)
-            .dec_by(gpuCnt as i64);
+        SCHEDULER_METRICS.lock().await.totalGPU.remove(&nodelabel);
 
         if !self.nodes.contains_key(&key) {
             return Err(Error::NotExist(format!("NodeMgr::Remove {}", key)));
@@ -2734,6 +2936,59 @@ impl SchedulerHandler {
         self.nodes.remove(&key);
 
         return Ok(());
+    }
+
+    // when statesvc and ixproxy restart together, there might be chance the new statesvc will give the node with new epoch
+    // the CheckNodeEpoch will delete all the pod, snapshot
+    pub async fn CheckNodeEpoch(&mut self, nodename: &str, nodeEpoch: i64) {
+        match self.nodeEpoch.get(nodename) {
+            None => {
+                // one new node
+                self.nodeEpoch.insert(nodename.to_owned(), nodeEpoch);
+                return;
+            }
+            Some(&oldEpoch) => {
+                if oldEpoch == nodeEpoch {
+                    // match, that's good
+                    return;
+                }
+
+                // one new node create
+                self.CleanNode(nodename).await;
+                self.nodeEpoch.insert(nodename.to_owned(), nodeEpoch);
+            }
+        }
+    }
+
+    pub async fn CleanNode(&mut self, nodename: &str) {
+        let tempPods = self.nodePods.remove(nodename);
+        if let Some(pods) = tempPods {
+            for (_, wp) in pods {
+                self.RemovePod(&wp.pod).await.ok();
+            }
+        }
+
+        let pods = match self.nodes.get(nodename) {
+            Some(ns) => ns.pods.clone(),
+            None => BTreeMap::new(),
+        };
+
+        for (_, wp) in pods {
+            self.RemovePod(&wp.pod).await.ok();
+        }
+
+        // remove snapshot
+        self.snapshots.remove(nodename);
+
+        let node = match self.nodes.get(nodename) {
+            None => {
+                return;
+            }
+            Some(ns) => ns.node.clone(),
+        };
+
+        self.RemoveNode(node).await.ok();
+        return;
     }
 
     pub fn AddPod(&mut self, pod: FuncPod) -> Result<()> {
@@ -2794,6 +3049,20 @@ impl SchedulerHandler {
             .insert(podKey.clone(), boxPod.clone())
             .expect("UpdatePod get none old pod");
 
+        error!(
+            "Updatepad pod {}, state {:?}, old work state {:?}",
+            &podKey,
+            &boxPod.pod.object.status.state,
+            oldPod.State()
+        );
+
+        match oldPod.State() {
+            WorkerPodState::Working(_) => {
+                boxPod.SetState(oldPod.State());
+            }
+            _ => (),
+        }
+
         match self.nodes.get_mut(&nodeName) {
             None => match self.nodePods.get_mut(&nodeName) {
                 None => {
@@ -2834,7 +3103,39 @@ impl SchedulerHandler {
         let nodeName = pod.object.spec.nodename.clone();
         let funcKey = pod.FuncKey();
 
-        assert!(self.pods.remove(&podKey).is_some());
+        match self.pods.remove(&podKey) {
+            None => unreachable!(),
+            Some(worker) => {
+                let state = worker.State();
+                match state {
+                    WorkerPodState::Working(_gatewayId) => {
+                        let gpuCnt = worker.pod.object.spec.reqResources.gpu.gpuCount;
+                        let nodelabel = Nodelabel {
+                            nodename: worker.pod.object.spec.nodename.clone(),
+                        };
+
+                        let cnt = SCHEDULER_METRICS
+                            .lock()
+                            .await
+                            .usedGpuCnt
+                            .Dec(nodelabel.clone(), gpuCnt);
+
+                        SCHEDULER_METRICS
+                            .lock()
+                            .await
+                            .usedGPU
+                            .get_or_create(&nodelabel)
+                            .set(cnt as i64);
+
+                        error!(
+                            "user GPU desc fail pod {:?} {} {}",
+                            &worker.pod.object.spec.funcname, gpuCnt, cnt
+                        );
+                    }
+                    _ => (),
+                }
+            }
+        }
 
         let podCreateType = pod.object.spec.create_type;
 
@@ -2851,15 +3152,26 @@ impl SchedulerHandler {
                     );
                     match podCreateType {
                         CreatePodType::Snapshot => {
-                            func.object.status.snapshotingFailureCnt += 1;
-                            if func.object.status.snapshotingFailureCnt >= 3 {
-                                func.object.status.state = FuncState::Fail;
+                            match self.funcstatus.get(&funcKey).cloned() {
+                                None => {
+                                    error!("RemovePod can't get funcstatus for {}", &funcKey);
+                                }
+                                Some(mut status) => {
+                                    error!("RemovePod the funcstate is {:?}", status);
+
+                                    status.object.snapshotingFailureCnt += 1;
+
+                                    self.AddSnapshotTask(&nodeName, &pod.FuncKey());
+                                    if status.object.snapshotingFailureCnt >= 3 {
+                                        status.object.state = FuncState::Fail;
+                                    }
+
+                                    let client = GetClient().await.unwrap();
+
+                                    // update the func
+                                    client.Update(&status.DataObject(), 0).await.unwrap();
+                                }
                             }
-
-                            let client = GetClient().await.unwrap();
-
-                            // update the func
-                            client.Update(&func.DataObject(), 0).await.unwrap();
                         }
                         CreatePodType::Restore => {
                             func.object.status.resumingFailureCnt += 1;
@@ -2947,6 +3259,7 @@ pub enum ListType {
     Node,
     FuncPod,
     Func,
+    FuncStatus,
     Snapshot,
     Funcpolicy,
 }
@@ -2976,5 +3289,39 @@ pub async fn GetClient() -> Result<CacherClient> {
         "GetClient fail: can't connect any valid statesvc {:?}",
         addrs
     );
+    return Err(Error::CommonError(errstr));
+}
+
+pub async fn GetClientWithRetry() -> Result<CacherClient> {
+    let mut delay = Duration::from_millis(100);
+    let max_delay = Duration::from_secs(3);
+    let max_retries = 5;
+
+    let addr = &SCHEDULER_CONFIG.stateSvcAddrs;
+
+    for attempt in 1..=max_retries {
+        match CacherClient::New(addr[0].clone()).await {
+            Ok(client) => {
+                error!(
+                    "Connected to state service at {} after {} attempt(s)",
+                    addr[0], attempt
+                );
+                return Ok(client);
+            }
+            Err(e) => {
+                error!(
+                    "fail to connect to {} (attempt {}/{}), err={:?}",
+                    addr[0], attempt, max_retries, e
+                );
+            }
+        }
+
+        if attempt < max_retries {
+            tokio::time::sleep(delay).await;
+            delay = std::cmp::min(delay * 2, max_delay);
+        }
+    }
+
+    let errstr = format!("GetClient fail: after {} attempt(s)", max_retries);
     return Err(Error::CommonError(errstr));
 }

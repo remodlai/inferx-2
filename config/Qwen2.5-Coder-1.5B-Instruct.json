@@ -17,6 +17,7 @@
             "resources": {
                 "CPU": 12000,
                 "Mem": 24000,
+                "ReadyMem": 3000,
                 "GPU": {
                     "Type": "Any",
                     "Count": 1,
@@ -55,6 +56,16 @@
             "sample_query": {
                 "apiType": "text2text",
                 "prompt": "write a quick sort algorithm.",
+                "prompts": [
+                    "Write a Python function that computes Fibonacci numbers. Explain time complexity.",
+                    "Translate the following Chinese text to English: 今天天气很好。",
+                    "Explain general relativity in simple language.",
+                    "Write a legal contract clause about liability and indemnification.",
+                    "Summarize the plot of a fantasy novel involving dragons.",
+                    "Solve this calculus integral: ∫ x^3 log(x) dx",
+                    "Generate a JSON schema describing a user profile.",
+                    "Explain why emojis like 😀🔥🚀 represent byte-level tokens."
+                ],
                 "path": "v1/completions",
                 "body": {
                     "model": "Qwen/Qwen2.5-Coder-1.5B-Instruct",

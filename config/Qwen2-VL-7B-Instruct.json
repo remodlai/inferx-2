@@ -5,7 +5,7 @@
     "name": "Qwen2-VL-7B-Instruct",
     "object": {
         "spec": {
-            "image": "vllm/vllm-openai:v0.10.0",
+            "image": "vllm/vllm-openai:v0.11.0",
             "commands": [
                 "--model",
                 "Qwen/Qwen2-VL-7B-Instruct",
@@ -25,7 +25,7 @@
                 "GPU": {
                     "Type": "Any",
                     "Count": 2,
-                    "vRam": 13800
+                    "vRam": 13000
                 }
             },
             "envs": [

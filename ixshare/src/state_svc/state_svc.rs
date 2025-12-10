@@ -16,6 +16,7 @@ use std::result::Result as SResult;
 use std::sync::Arc;
 
 use inferxlib::obj_mgr::funcpolicy_mgr::FuncPolicy;
+use inferxlib::obj_mgr::funcstatus_mgr::FunctionStatus;
 use inferxlib::selector::Selector;
 use serde_json::Value;
 use tokio::sync::mpsc;
@@ -59,6 +60,7 @@ lazy_static::lazy_static! {
         Node::KEY,
         Namespace::KEY,
         Function::KEY,
+        FunctionStatus::KEY,
         Tenant::KEY,
         FuncPolicy::KEY,
         SchedulerInfo::KEY,
@@ -282,6 +284,19 @@ impl ixmeta::ix_meta_service_server::IxMetaService for StateSvc {
         Ok(Response::new(response))
     }
 
+    async fn get_addr(
+        &self,
+        _request: Request<ixmeta::GetAddrReqMessage>,
+    ) -> SResult<Response<ixmeta::GetAddrReponseMessage>, Status> {
+        let addr = STATESVC_CONFIG.svcIp.clone();
+        let port = STATESVC_CONFIG.stateSvcPort;
+        return Ok(Response::new(ixmeta::GetAddrReponseMessage {
+            error: "".into(),
+            svc_ip: addr,
+            port: port as i64,
+        }));
+    }
+
     async fn create(
         &self,
         request: Request<ixmeta::CreateRequestMessage>,
@@ -318,6 +333,17 @@ impl ixmeta::ix_meta_service_server::IxMetaService for StateSvc {
             }
             Ok(o) => o,
         };
+
+        match self.CreateFuncStatus(&dataobj).await {
+            Ok(()) => (),
+            Err(e) => {
+                return Ok(Response::new(ixmeta::CreateResponseMessage {
+                    error: format!("create error: {:?}", e),
+                    revision: 0,
+                }))
+            }
+        }
+
         return Ok(Response::new(ixmeta::CreateResponseMessage {
             error: "".into(),
             revision: o.revision,
@@ -358,6 +384,17 @@ impl ixmeta::ix_meta_service_server::IxMetaService for StateSvc {
             }
             Ok(o) => o,
         };
+
+        match self.UpdateFuncStatus(&dataobj).await {
+            Ok(()) => (),
+            Err(e) => {
+                return Ok(Response::new(ixmeta::UpdateResponseMessage {
+                    error: format!("update funcstatus error: {:?}", e),
+                    revision: 0,
+                }))
+            }
+        }
+
         return Ok(Response::new(ixmeta::UpdateResponseMessage {
             error: "".into(),
             revision: o.revision,
@@ -413,6 +450,19 @@ impl ixmeta::ix_meta_service_server::IxMetaService for StateSvc {
                 }));
             }
             Ok(rev) => {
+                match self
+                    .DeleteFuncStatus(&req.obj_type, &req.tenant, &req.namespace, &req.name)
+                    .await
+                {
+                    Ok(()) => (),
+                    Err(e) => {
+                        return Ok(Response::new(ixmeta::DeleteResponseMessage {
+                            error: format!("delete funcstatus error: {:?}", e),
+                            revision: 0,
+                        }));
+                    }
+                };
+
                 return Ok(Response::new(ixmeta::DeleteResponseMessage {
                     error: "".into(),
                     revision: rev,
@@ -663,8 +713,13 @@ pub async fn StateService(notify: Option<Arc<Notify>>) -> Result<()> {
     info!("StateService config {:#?}", *STATESVC_CONFIG);
     let stateSvc = StateSvc::New(&STATESVC_CONFIG.etcdAddrs, &STATESVC_CONFIG.auditdbAddr).await?;
 
-    let stateSvcRegister =
-        StateSvcRegister::New(&STATESVC_CONFIG.etcdAddrs, "ss", "0.0.0.0", 8890).await?;
+    let stateSvcRegister = StateSvcRegister::New(
+        &STATESVC_CONFIG.etcdAddrs,
+        "ss",
+        &STATESVC_CONFIG.svcIp,
+        STATESVC_CONFIG.stateSvcPort,
+    )
+    .await?;
 
     error!("StateService 1");
     let nodeagentAggrStore = IxAggrStore::New(&stateSvc.svcDir.ChannelRev()).await?;

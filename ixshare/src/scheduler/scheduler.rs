@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::pin::Pin;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::time::Instant;
 
 use once_cell::sync::OnceCell;
 use tokio_stream::wrappers::ReceiverStream;
@@ -197,6 +199,8 @@ impl Scheduler {
 
 pub async fn SchedulerSvc() -> Result<()> {
     SCHEDULER_METRICS.lock().await.Register().await;
+    SCHEDULER_METRICS.lock().await.totalGPU.clear();
+    SCHEDULER_METRICS.lock().await.usedGPU.clear();
 
     let objRepo = SchedObjRepo::New(SCHEDULER_CONFIG.stateSvcAddrs.clone()).await?;
 
@@ -253,7 +257,15 @@ pub async fn SchedulerProcess() -> Result<()> {
             info!("schedulersvc finish {:?}", res);
         }
         res  = schedulerRegister.Process(leaseId) => {
-            info!("schedulerRegister finish {:?}", res);
+            match res {
+                Ok(()) => {
+                    info!("schedulerRegister stopped");
+                }
+                Err(e) => {
+                    error!("schedulerRegister keepalive failed {:?}", e);
+                    panic!("LeaseKeepalive failed: {:?}", e);
+                }
+            }
         }
     }
 
@@ -418,6 +430,31 @@ pub enum SchedTask {
     StandbyTask(String),
     AddNode(String),
     AddFunc(String),
+    DelayedInitNode(String),
+}
+
+#[derive(Debug)]
+pub struct TimedTask {
+    pub when: Instant,
+    pub task: SchedTask,
+}
+
+impl Eq for TimedTask {}
+impl PartialEq for TimedTask {
+    fn eq(&self, other: &Self) -> bool {
+        self.when.eq(&other.when)
+    }
+}
+impl Ord for TimedTask {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // reverse for min-heap by time
+        other.when.cmp(&self.when)
+    }
+}
+impl PartialOrd for TimedTask {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 #[derive(Debug, Clone)]

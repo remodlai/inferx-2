@@ -39,12 +39,19 @@ use hyper_util::rt::TokioIo;
 use inferxlib::data_obj::DeltaEvent;
 
 use crate::common::*;
+use crate::gateway::metrics::{FunccallLabels, GATEWAY_METRICS};
+use crate::gateway::trace::trace_logging_enabled;
 use crate::na::LeaseWorkerResp;
 use crate::peer_mgr::IxTcpClient;
 use inferxlib::obj_mgr::func_mgr::HttpEndpoint;
 
 use super::func_agent_mgr::{FuncAgent, IxTimestamp, WorkerUpdate};
 use super::scheduler_client::SCHEDULER_CLIENT;
+use serde_json::json;
+
+fn trace_logs() -> bool {
+    trace_logging_enabled()
+}
 
 pub const FUNCCALL_URL: &str = "http://127.0.0.1/funccall";
 pub const RESPONSE_LIMIT: usize = 4 * 1024 * 1024; // 4MB
@@ -363,6 +370,15 @@ impl FuncWorker {
     pub async fn HandleReturn(&self, sender: HttpSender) -> bool {
         self.funcAgent.activeReqCnt.fetch_sub(1, Ordering::SeqCst);
         let ongoingReqCnt = self.ongoingReqCnt.fetch_sub(1, Ordering::AcqRel);
+        if trace_logs() {
+            error!(
+                "HandleReturn start for {}, fail: {}, ongoing before {}",
+                sender.podname,
+                sender.Fail(),
+                ongoingReqCnt
+            );
+        }
+
         if sender.Fail() {
             if self.failCount.fetch_add(1, Ordering::AcqRel) == 3 {
                 // fail 3 times
@@ -389,7 +405,16 @@ impl FuncWorker {
 
         self.perfStat.processTime.fetch_add(gap, Ordering::SeqCst);
 
+        let podname = sender.podname.clone();
         self.connPool.ReturnSender(sender).await;
+
+        if trace_logs() {
+            error!(
+                "HandleReturn done for {}, ongoing now {}",
+                podname,
+                self.ongoingReqCnt.load(Ordering::Relaxed)
+            );
+        }
 
         return false;
     }
@@ -403,6 +428,7 @@ impl FuncWorker {
         let tracer = opentelemetry::global::tracer("gateway");
         let mut span = tracer.start("lease");
         self.SetState(FuncWorkerState::Init);
+        let start = std::time::Instant::now();
         let resp = match self.LeaseWorker().await {
             Err(e) => {
                 span.end();
@@ -431,6 +457,23 @@ impl FuncWorker {
             }
             Ok(resp) => resp,
         };
+
+        let labels = FunccallLabels {
+            tenant: self.tenant.clone(),
+            namespace: self.namespace.clone(),
+            funcname: self.funcname.clone(),
+            status: StatusCode::OK.as_u16(),
+        };
+        let leaseLatency = start.elapsed().as_millis();
+        if !resp.keepalive {
+            error!("cold start latency {:?}/{}", &labels, leaseLatency);
+            GATEWAY_METRICS
+                .lock()
+                .await
+                .funccallCsTtft
+                .get_or_create(&labels)
+                .observe(leaseLatency as f64 / 1000.0);
+        }
 
         span.end();
 
@@ -464,6 +507,7 @@ impl FuncWorker {
             .SendWorkerStatusUpdate(WorkerUpdate::Ready(self.clone()));
         self.SetState(FuncWorkerState::Processing);
         let reqQueue = self.funcAgent.reqQueue.clone();
+
         loop {
             let isScaleInWorker =
                 self.workerId == self.funcAgent.scaleInWorkerId.load(Ordering::Relaxed);
@@ -541,8 +585,9 @@ impl FuncWorker {
 
                     if cnt > 0 {
                         let reqs = reqQueue.TryRecvBatch(cnt).await;
+                        let reqCnt = reqs.len();
+                        self.ongoingReqCnt.fetch_add(reqCnt, Ordering::SeqCst);
                         for req in reqs {
-                            self.ongoingReqCnt.fetch_add(1, Ordering::SeqCst);
                             let client = match self.NewHttpCallClient().await {
                                 Err(e) => {
                                     error!("Funcworker connect fail with error {:?}", &e);
@@ -561,13 +606,38 @@ impl FuncWorker {
                             };
                             req.Send(Ok(client));
                         }
+                        if trace_logs() {
+                            error!(
+                                "FuncWorker::Process 0, id: {}, activeCnt: {}, ongingCnt: {}, reqeust: {}",
+                                id,
+                                self.funcAgent.parallelLeve.load(Ordering::Relaxed),
+                                self.ongoingReqCnt.load(Ordering::Relaxed),
+                                reqCnt
+                            );
+                        }
                     }
 
                     if self.ongoingReqCnt.load(Ordering::Relaxed) == 0 {
+                        if trace_logs() {
+                            error!(
+                                "FuncWorker::Process 0.1, id: {}, activeCnt: {}, ongingCnt: {}",
+                                id,
+                                self.funcAgent.parallelLeve.load(Ordering::Relaxed),
+                                self.ongoingReqCnt.load(Ordering::Relaxed),
+                            );
+                        }
                         self.SetState(FuncWorkerState::Idle);
                     } else if self.funcAgent.parallelLeve.load(Ordering::Relaxed)
                         > self.ongoingReqCnt.load(Ordering::Relaxed)
                     {
+                        if trace_logs() {
+                            error!(
+                                "FuncWorker::Process 1, id: {}, activeCnt: {}, ongingCnt: {}",
+                                id,
+                                self.funcAgent.parallelLeve.load(Ordering::Relaxed),
+                                self.ongoingReqCnt.load(Ordering::Relaxed),
+                            );
+                        }
                         tokio::select! {
                             _ = self.closeNotify.notified() => {
                                 self.stop.store(false, Ordering::SeqCst);
@@ -595,7 +665,23 @@ impl FuncWorker {
                                 }
                             }
                         }
+                        if trace_logs() {
+                            error!(
+                                "FuncWorker::Process 1.1, id: {}, activeCnt: {}, ongingCnt: {}",
+                                id,
+                                self.funcAgent.parallelLeve.load(Ordering::Relaxed),
+                                self.ongoingReqCnt.load(Ordering::Relaxed),
+                            );
+                        }
                     } else {
+                        if trace_logs() {
+                            error!(
+                                "FuncWorker::Process 2, id: {}, activeCnt: {}, ongingCnt: {}",
+                                id,
+                                self.funcAgent.parallelLeve.load(Ordering::Relaxed),
+                                self.ongoingReqCnt.load(Ordering::Relaxed),
+                            );
+                        }
                         tokio::select! {
                             _ = self.closeNotify.notified() => {
                                 self.stop.store(false, Ordering::SeqCst);
@@ -620,6 +706,14 @@ impl FuncWorker {
                                     }
                                 }
                             }
+                        }
+                        if trace_logs() {
+                            error!(
+                                "FuncWorker::Process 2.1, id: {}, activeCnt: {}, ongingCnt: {}",
+                                id,
+                                self.funcAgent.parallelLeve.load(Ordering::Relaxed),
+                                self.ongoingReqCnt.load(Ordering::Relaxed),
+                            );
                         }
                     }
                 }
@@ -646,6 +740,18 @@ impl FuncWorker {
             self.id.load(Ordering::Relaxed),
             self.workerId
         );
+    }
+
+    pub fn DebugInfo(&self) -> serde_json::Value {
+        let state = self.state.lock().unwrap().clone();
+        json!({
+            "workerId": self.id.load(Ordering::Relaxed),
+            "workerName": self.WorkerName(),
+            "ongoingReqCnt": self.ongoingReqCnt.load(Ordering::Relaxed),
+            "parallelLevel": self.parallelLevel,
+            "state": format!("{:?}", state),
+            "keepalive": self.keepalive.load(Ordering::Relaxed),
+        })
     }
 }
 
@@ -999,9 +1105,15 @@ impl Drop for QHttpCallClient {
         let sender = self.sender.take().unwrap();
         match self.finishQueue.try_send(sender) {
             Err(_e) => {
-                //error!("QHttpCallClient send fail with error {:?}", _e);
+                if trace_logs() {
+                    error!("QHttpCallClient send fail with error {:?}", _e);
+                }
             }
-            Ok(()) => (),
+            Ok(()) => {
+                if trace_logs() {
+                    error!("QHttpCallClient drop send finishQueue")
+                }
+            }
         }
     }
 }

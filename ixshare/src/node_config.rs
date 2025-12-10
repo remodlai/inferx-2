@@ -275,6 +275,7 @@ pub struct SchedulerConfig {
     pub stateSvcAddrs: Vec<String>,
     pub nodeIp: String,
     pub schedulerPort: u16,
+    pub auditdbAddr: String,
 }
 
 impl SchedulerConfig {
@@ -306,11 +307,17 @@ impl SchedulerConfig {
             Err(_) => config.stateSvcAddrs.clone(),
         };
 
+        let auditdbAddr = match std::env::var("AUDITDB_ADDR") {
+            Ok(s) => s,
+            Err(_) => config.auditdbAddr.clone(),
+        };
+
         let ret = Self {
             etcdAddrs: etcdAddrs,
             stateSvcAddrs: stateSvcAddrs,
             nodeIp: nodeIp,
             schedulerPort: schedulerPort,
+            auditdbAddr: auditdbAddr,
         };
 
         error!("SchedulerConfig is {:#?}", &ret);
@@ -322,6 +329,7 @@ impl SchedulerConfig {
 #[derive(Debug)]
 pub struct StateSvcConfig {
     pub etcdAddrs: Vec<String>,
+    pub svcIp: String,
     pub stateSvcPort: u16,
     pub auditdbAddr: String,
 }
@@ -331,6 +339,14 @@ impl StateSvcConfig {
         let etcdAddrs = match std::env::var("ETCD_ADDR") {
             Ok(s) => vec![s],
             Err(_) => config.etcdAddrs.clone(),
+        };
+
+        let svcIp = if config.nodeIp.len() == 0 {
+            assert!(config.hostIpCidr.len() != 0);
+            let nodeIp = GetLocalIp(&config.hostIpCidr).unwrap();
+            nodeIp
+        } else {
+            config.nodeIp.clone()
         };
 
         let stateSvcPort = if config.stateSvcPort == 0 {
@@ -346,6 +362,7 @@ impl StateSvcConfig {
 
         let ret = Self {
             etcdAddrs,
+            svcIp: svcIp,
             stateSvcPort: stateSvcPort,
             auditdbAddr: auditdbAddr,
         };

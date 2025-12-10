@@ -70,6 +70,7 @@ use super::func_agent_mgr::IxTimestamp;
 use super::func_agent_mgr::GW_OBJREPO;
 use super::func_worker::QHttpCallClient;
 use super::func_worker::RETRYABLE_HTTP_STATUS;
+use super::trace::{set_trace_logging, trace_logging_enabled};
 use super::gw_obj_repo::{GwObjRepo, NamespaceStore};
 use super::metrics::FunccallLabels;
 use super::metrics::Status;
@@ -133,6 +134,7 @@ impl HttpGateway {
             .route("/funccall/*rest", get(FuncCall))
             .route("/funccall/*rest", head(FuncCall))
             .route("/prompt/", post(PostPrompt))
+            .route("/debug/func_agents", get(GetFuncAgentsState))
             .route(
                 "/sampleccall/:tenant/:namespace/:name/",
                 get(GetSampleRestCall),
@@ -180,6 +182,10 @@ impl HttpGateway {
             )
             .route("/snapshots/:tenant/:namespace/", get(GetSnapshots))
             .route("/metrics", get(GetMetrics))
+            .route(
+                "/debug/trace_logging/:state",
+                post(SetTraceLogging),
+            )
             .with_state(self.clone())
             .layer(cors)
             .layer(axum::middleware::from_fn(auth_transform_keycloaktoken))
@@ -218,6 +224,45 @@ async fn root() -> &'static str {
     "InferX Gateway!"
 }
 
+async fn SetTraceLogging(
+    Extension(_token): Extension<Arc<AccessToken>>,
+    Path(state): Path<String>,
+) -> SResult<Response, StatusCode> {
+    let lower = state.to_ascii_lowercase();
+    let enable = match lower.as_str() {
+        "on" | "enable" | "enabled" | "true" | "1" => Some(true),
+        "off" | "disable" | "disabled" | "false" | "0" => Some(false),
+        _ => None,
+    };
+
+    let enable = match enable {
+        Some(v) => v,
+        None => {
+            let body = Body::from(format!("invalid state '{}', use on/off", state));
+            let resp = Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(body)
+                .unwrap();
+            return Ok(resp);
+        }
+    };
+
+    set_trace_logging(enable);
+    error!("TRACE_GATEWAY_LOG: {}", trace_logging_enabled());
+
+    let body = Body::from(if enable {
+        "trace logging enabled"
+    } else {
+        "trace logging disabled"
+    });
+
+    let resp = Response::builder()
+        .status(StatusCode::OK)
+        .body(body)
+        .unwrap();
+    return Ok(resp);
+}
+
 async fn GetMetrics() -> SResult<Response, StatusCode> {
     let mut buffer = String::new();
     let registery = METRICS_REGISTRY.lock().await;
@@ -230,6 +275,19 @@ async fn GetMetrics() -> SResult<Response, StatusCode> {
         )
         .body(Body::from(buffer))
         .unwrap());
+}
+
+async fn GetFuncAgentsState(
+    Extension(_token): Extension<Arc<AccessToken>>,
+    State(gw): State<HttpGateway>,
+) -> SResult<Response, StatusCode> {
+    let data = gw.funcAgentMgr.DebugInfo().await;
+    let resp = Response::builder()
+        .status(StatusCode::OK)
+        .header(CONTENT_TYPE, "application/json")
+        .body(Body::from(data.to_string()))
+        .unwrap();
+    Ok(resp)
 }
 
 async fn GetReqs(
@@ -658,6 +716,7 @@ async fn RetryGetClient(
                     // );
                     continue;
                 }
+                error!("RetryGetClient, e: {:?}", e);
                 return Err(e);
             }
             Ok(client) => {
@@ -671,17 +730,9 @@ async fn RetryGetClient(
     }
 }
 
-async fn FailureResponse(e: Error, labels: &mut FunccallLabels, status: Status) -> Response<Body> {
-    labels.status = status;
-    GATEWAY_METRICS
-        .lock()
-        .await
-        .funccallcnt
-        .get_or_create(labels)
-        .inc();
-
+async fn FailureResponse(e: Error, labels: &mut FunccallLabels, _status: Status) -> Response<Body> {
     // error!("Http call fail with error {:?}", &e);
-    let errcode = match &e {
+    let errcode: StatusCode = match &e {
         Error::Timeout(_timeout) => {
             error!("Http start fail with timeout {:?}", _timeout);
             StatusCode::GATEWAY_TIMEOUT
@@ -699,6 +750,15 @@ async fn FailureResponse(e: Error, labels: &mut FunccallLabels, status: Status) 
             StatusCode::INTERNAL_SERVER_ERROR
         }
     };
+
+    labels.status = errcode.as_u16();
+    GATEWAY_METRICS
+        .lock()
+        .await
+        .funccallcnt
+        .get_or_create(labels)
+        .inc();
+
     let body = Body::from(format!("service failure {:?}", &e));
     let resp = Response::builder().status(errcode).body(body).unwrap();
 
@@ -710,15 +770,17 @@ pub struct Disconnect {
     pub cancel: AtomicBool,
     pub req: serde_json::Value,
     pub headers: http::HeaderMap,
+    pub labels: FunccallLabels,
 }
 
 impl Disconnect {
-    pub fn New(req: serde_json::Value, headers: http::HeaderMap) -> Self {
+    pub fn New(req: serde_json::Value, headers: http::HeaderMap, labels: &FunccallLabels) -> Self {
         return Self {
             start: std::time::Instant::now(),
             cancel: AtomicBool::new(false),
             req: req,
             headers: headers,
+            labels: labels.clone(),
         };
     }
 
@@ -731,6 +793,17 @@ impl Disconnect {
 impl Drop for Disconnect {
     fn drop(&mut self) {
         if !self.cancel.load(std::sync::atomic::Ordering::Acquire) {
+            let mut labels = self.labels.clone();
+            tokio::spawn(async move {
+                labels.status = 499; // Client close req
+                GATEWAY_METRICS
+                    .lock()
+                    .await
+                    .funccallcnt
+                    .get_or_create(&labels)
+                    .inc();
+            });
+
             error!(
                 "Funccall ********* Fail: Client disconnect before vllm return header {} ms, req {:#?}, headers {:#?}",
                 self.start.elapsed().as_millis(),
@@ -791,7 +864,7 @@ async fn FuncCall(
         tenant: tenant.clone(),
         namespace: namespace.clone(),
         funcname: funcname.clone(),
-        status: Status::NA,
+        status: StatusCode::OK.as_u16(),
     };
 
     let timestamp = IxTimestamp::default();
@@ -850,7 +923,7 @@ async fn FuncCall(
     let json_req: serde_json::Value =
         serde_json::from_slice(&bytes).map_err(|_| StatusCode::BAD_REQUEST)?;
     // error!("FuncCall get req {:#?}", json_req);
-    let disconnect = Disconnect::New(json_req.clone(), headers.clone());
+    let disconnect = Disconnect::New(json_req.clone(), headers.clone(), &labels);
 
     let mut retry = 0;
 
@@ -862,6 +935,7 @@ async fn FuncCall(
     loop {
         retry += 1;
         if timestamp.Elapsed() > timeout {
+            error!("FuncCall 1");
             let resp = FailureResponse(error, &mut labels, Status::RequestFailure).await;
             ttftCtx.span().end();
             return Ok(resp);
@@ -952,7 +1026,7 @@ async fn FuncCall(
 
     let mut first = true;
 
-    labels.status = Status::Success;
+    labels.status = StatusCode::OK.as_u16();
     GATEWAY_METRICS
         .lock()
         .await
@@ -986,7 +1060,10 @@ async fn FuncCall(
                 first = false;
 
                 total = ttft + tcpConnLatency;
-                // error!("ttft is {} ms /total {} ms", ttft, total);
+                // error!(
+                //     "ttft is {} ms /total {} ms keepalive {}",
+                //     ttft, total, keepalive
+                // );
                 if !keepalive {
                     GATEWAY_METRICS
                         .lock()

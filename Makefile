@@ -1,7 +1,9 @@
 ARCH := ${shell uname -m}
-VERSION := v0.1.5.beta16
+VERSION := v0.1.5.beta20
 NODE_NAME=${shell hostname}
 UBUNTU_VERSION :=$(shell lsb_release -sr)
+
+.PHONY: svc
 
 all: ctl dash spdk runmodel
 
@@ -9,8 +11,8 @@ WATCHED_DIR := ixshare svc
 
 svc: $(shell find $(WATCHED_DIR) -type f)
 	cargo +stable build --bin svc
-	sudo cp -f onenode_logging_config.yaml /opt/inferx/config/
-	sudo cp -f nodeconfig/node*.json /opt/inferx/config/	
+	-sudo cp -f onenode_logging_config.yaml /opt/inferx/config/
+	-sudo cp -f nodeconfig/node*.json /opt/inferx/config/	
 
 svcdeploy: svc
 	- mkdir -p ./target/svc
@@ -34,10 +36,11 @@ hf:
 pushhf: hf
 	sudo docker push inferx/inferx_hfdownload:v0.1.0
 
-# make download MODEL=Qwen/Qwen2.5-0.5B
+# make download MODEL=remodlai/Qwen3-VL-30B-A3B-Instruct-AWQ
 download:
 	sudo docker run --rm \
-    -v $(pwd)/models:/models \
+	--network host \
+    -v /opt/inferx/cache:/models \
     inferx/inferx_hfdownload:v0.1.0 \
         $(MODEL)
 
@@ -52,8 +55,8 @@ ctl:
 	# the release version has build error
 	OPENSSL_STATIC=1 cargo +stable build --bin ixctl
 	# sudo strip target/debug/ixctl
-	sudo cp -f ixctl_logging_config.yaml /opt/inferx/config/
-	sudo cp -f target/debug/ixctl /opt/inferx/bin/
+	-sudo cp -f ixctl_logging_config.yaml /opt/inferx/config/
+	-sudo cp -f target/debug/ixctl /opt/inferx/bin/
 
 dash:
 	mkdir -p ./target/dashboard
@@ -142,14 +145,6 @@ stop:
 stopblob:
 	sudo docker compose -f docker-compose_blob.yml down
 
-rundash:
-	sudo docker run --net=host --name inferx_dashboard --env "KEYCLOAK_URL=http://192.168.0.22:1260/authn" \
-	-v /etc/letsencrypt/:/etc/letsencrypt/ --rm  inferx/inferx_dashboard:$(VERSION)
-
-stopdash:
-	sudo docker stop inferx_dashboard
-
-
 runkblob:
 	-sudo rm /opt/inferx/log/*.log
 	sudo kubectl apply -f k8s/gateway-servicemonitor.yaml
@@ -172,12 +167,21 @@ runkblob:
 stopall:
 	sudo kubectl delete all --all 
 
+rundash:
+	VERSION=$(VERSION) envsubst < k8s/dashboard.yaml | sudo kubectl apply -f -
+
+stopdash:
+	sudo kubectl delete deployment inferx-dashboard
+
 runstatesvc:
 	VERSION=$(VERSION) envsubst < k8s/statesvc.yaml | sudo kubectl apply -f -
 
 stopstatesvc:
 	sudo kubectl delete deployment statesvc
-	
+
+rundb:
+	VERSION=$(VERSION) envsubst < k8s/db-deployment.yaml | sudo kubectl apply -f -
+
 runkdash:
 	VERSION=$(VERSION) envsubst < k8s/dashboard.yaml | sudo kubectl apply -f -
 
@@ -231,3 +235,33 @@ stopnaall:
 restartgw:
 	sudo kubectl delete deployment gateway
 	sudo kubectl apply -f k8s/gateway.yaml
+
+runallnb:
+	-sudo rm /opt/inferx/log/*.log
+	sudo kubectl apply -f k8s/etcd.yaml
+	sudo kubectl apply -f k8s/keycloak_postgres.yaml
+	sudo kubectl apply -f k8s/keycloak.yaml
+	VERSION=$(VERSION) envsubst < k8s/secretdb.yaml | sudo kubectl apply -f -
+	VERSION=$(VERSION) envsubst < k8s/db-deployment.yaml | sudo kubectl apply -f -
+	VERSION=$(VERSION) envsubst < k8s/statesvc.yaml | sudo kubectl apply -f -
+	VERSION=$(VERSION) envsubst < k8s/gateway.yaml | sudo kubectl apply -f -
+	VERSION=$(VERSION) envsubst < k8s/scheduler.yaml | sudo kubectl apply -f -
+	VERSION=$(VERSION) envsubst < k8s/ixproxy-nb.yaml | sudo kubectl apply -f -
+	VERSION=$(VERSION) envsubst < k8s/nodeagent-nb.yaml | sudo kubectl apply -f -
+	VERSION=$(VERSION) envsubst < k8s/dashboard-nb.yaml | sudo kubectl apply -f -
+	sudo kubectl apply -f k8s/ingress.yaml
+
+runallnbmg:
+	-sudo rm /opt/inferx/log/*.log
+	sudo kubectl apply -f k8s/etcd.yaml
+	sudo kubectl apply -f k8s/keycloak_postgres.yaml
+	sudo kubectl apply -f k8s/keycloak.yaml
+	VERSION=$(VERSION) envsubst < k8s/secretdb.yaml | sudo kubectl apply -f -
+	VERSION=$(VERSION) envsubst < k8s/db-deployment.yaml | sudo kubectl apply -f -
+	VERSION=$(VERSION) envsubst < k8s/statesvc.yaml | sudo kubectl apply -f -
+	VERSION=$(VERSION) envsubst < k8s/gateway.yaml | sudo kubectl apply -f -
+	VERSION=$(VERSION) envsubst < k8s/scheduler.yaml | sudo kubectl apply -f -
+	VERSION=$(VERSION) envsubst < k8s/ixproxy-nbmg.yaml | sudo kubectl apply -f -
+	VERSION=$(VERSION) envsubst < k8s/nodeagent-nbmg.yaml | sudo kubectl apply -f -
+	VERSION=$(VERSION) envsubst < k8s/dashboard-nb.yaml | sudo kubectl apply -f -
+	sudo kubectl apply -f k8s/ingress.yaml
