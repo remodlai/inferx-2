@@ -1,0 +1,152 @@
+# Keycloak Deployment for auth.remodl.ai
+# Uses CloudNativePG PostgreSQL cluster
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: keycloak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.0.7
+          imagePullPolicy: IfNotPresent
+          args: ["start-dev"]  # Use start-dev for non-production; use start --optimized with custom image for production
+          env:
+            - name: KEYCLOAK_ADMIN
+              value: admin
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-admin-secret
+                  key: password
+            - name: KC_DB
+              value: postgres
+            - name: KC_DB_URL
+              value: jdbc:postgresql://keycloak-pg-cluster-rw:5432/keycloak
+            - name: KC_DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-pg-cluster-app
+                  key: username
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-pg-cluster-app
+                  key: password
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_PROXY_HEADERS
+              value: xforwarded
+            - name: KC_HOSTNAME
+              value: auth.remodl.ai
+            - name: KC_HOSTNAME_STRICT
+              value: "false"
+            # No KC_HTTP_RELATIVE_PATH - using root path
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          readinessProbe:
+            httpGet:
+              path: /realms/master
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+---
+# Note: Secrets are managed separately (not in git)
+#
+# Admin credentials:
+#   kubectl -n keycloak create secret generic keycloak-admin-secret --from-literal=password='YOUR_PASSWORD'
+#
+# SMTP credentials (for email - configure in Realm Settings > Email):
+#   kubectl -n keycloak create secret generic keycloak-smtp-secret \
+#     --from-literal=host=smtp.resend.com \
+#     --from-literal=port=2465 \
+#     --from-literal=username=resend \
+#     --from-literal=password='RESEND_API_KEY' \
+#     --from-literal=from=platform@remodl.ai \
+#     --from-literal=from-display-name='Platform Admin' \
+#     --from-literal=reply-to=noreply@remodl.ai
+#
+# Email settings to configure in Keycloak Admin Console (Realm Settings > Email):
+#   From: platform@remodl.ai
+#   From Display Name: Platform Admin
+#   Reply To: noreply@remodl.ai
+#   Host: smtp.resend.com
+#   Port: 2465
+#   Enable SSL: true
+#   Authentication: enabled
+#   Username: resend
+#   Password: (from keycloak-smtp-secret)
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: keycloak
+spec:
+  type: ClusterIP
+  selector:
+    app: keycloak
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: auth-ingress
+  namespace: keycloak
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.middlewares: keycloak-keycloak-redirect-https@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: auth.remodl.ai
+      http:
+        paths:
+          - backend:
+              service:
+                name: keycloak
+                port:
+                  number: 8080
+            path: /
+            pathType: Prefix
+  tls:
+    - hosts:
+        - auth.remodl.ai
+      secretName: auth-remodl-tls
+---
+# HTTPS redirect middleware
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: keycloak-redirect-https
+  namespace: keycloak
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true

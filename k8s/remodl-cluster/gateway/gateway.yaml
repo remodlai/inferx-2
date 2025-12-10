@@ -20,7 +20,7 @@ spec:
       hostPID: true
       containers:
         - name: gateway
-          image: inferx/inferx_platform:v0.1.5.beta20
+          image: remodlai/inferx_platform:v0.1.5.beta21
           imagePullPolicy: IfNotPresent
           livenessProbe:          # <-- Kubernetes keepalive check
             httpGet:
@@ -45,6 +45,10 @@ spec:
             value: "http://statesvc:1237"
           - name: ETCD_ADDRS
             value: "http://etcd:2379"
+          - name: KEYCLOAK_REALM
+            value: "remodl"
+          - name: KEYCLOAK_URL
+            value: "https://auth.remodl.ai"
           volumeMounts:
             - mountPath: /opt/inferx/log
               name: opt-inferx-log

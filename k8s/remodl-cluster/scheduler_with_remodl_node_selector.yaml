@@ -23,7 +23,7 @@ spec:
       hostPID: true
       containers:
         - name: scheduler
-          image: inferx/inferx_platform:v0.1.5.beta17
+          image: remodlai/inferx_platform:v0.1.5.beta21
           imagePullPolicy: IfNotPresent
           env:
           - name: POD_IP

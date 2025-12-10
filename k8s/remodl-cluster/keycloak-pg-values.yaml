@@ -1,0 +1,72 @@
+# CloudNativePG Cluster for Keycloak
+# Deploy with: helm upgrade --install keycloak-pg cnpg/cluster -n keycloak --create-namespace -f keycloak-pg-values.yaml
+
+type: postgresql
+mode: standalone
+
+version:
+  postgresql: "16"
+
+cluster:
+  instances: 2  # Primary + 1 standby for HA
+
+  storage:
+    size: "10Gi"
+    storageClass: "ebs-csi-default-sc"
+
+  initdb:
+    database: keycloak
+    owner: keycloak
+
+  postgresql:
+    parameters:
+      max_connections: "100"
+      shared_buffers: "256MB"
+      effective_cache_size: "768MB"
+      work_mem: "4MB"
+    pg_hba:
+      - "host keycloak keycloak 0.0.0.0/0 scram-sha-256"
+
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+  enableSuperuserAccess: true
+  logLevel: "info"
+
+backups:
+  enabled: true
+  provider: s3
+  retentionPolicy: "30d"
+
+  endpointURL: "https://s3.us-east-1.amazonaws.com"
+  destinationPath: "s3://platform-cluster-backups/keycloak-pg"
+
+  s3:
+    region: "us-east-1"
+    bucket: "platform-cluster-backups"
+    path: "/keycloak-pg"
+    accessKey: "AKIA********************"
+    secretKey: "************************************"
+    inheritFromIAMRole: false
+
+  secret:
+    create: true
+    name: "keycloak-pg-backup-creds"
+
+  scheduledBackups:
+    - name: daily-backup
+      schedule: "0 0 2 * * *"  # 2 AM daily
+      backupOwnerReference: self
+
+  data:
+    compression: "gzip"
+    jobs: 2
+
+  wal:
+    compression: "gzip"
+    maxParallel: 1
