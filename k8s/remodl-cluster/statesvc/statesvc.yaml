@@ -19,7 +19,7 @@ spec:
         inferx-cpu-worker: "true"
       containers:
         - name: statesvc
-          image: inferx/inferx_platform:v0.1.5.beta17
+          image: inferx/inferx_platform:v0.1.5.beta20
           imagePullPolicy: IfNotPresent
           securityContext:
             capabilities:

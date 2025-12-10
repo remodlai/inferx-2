@@ -20,7 +20,7 @@ spec:
       hostPID: true
       containers:
         - name: gateway
-          image: inferx/inferx_platform:v0.1.5.beta16
+          image: inferx/inferx_platform:v0.1.5.beta20
           imagePullPolicy: IfNotPresent
           livenessProbe:          # <-- Kubernetes keepalive check
             httpGet:
