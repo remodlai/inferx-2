@@ -1,0 +1,113 @@
+{
+    "image": "vllm/vllm-openai:v0.12.0",
+    "commands": [
+        "/root/.cache/huggingface/hub/models--openai--gpt-oss-20b/snapshots/6cee5e81ee83917806bbde320786a8fb61efebee",
+        "--trust-remote-code",
+        "--max-model-len",
+        "100000",
+        "--async-scheduling",
+        "--enable-auto-tool-choice",
+        "--tool-call-parser",
+        "openai",
+        "--served-model-name",
+        "gpt-oss-20b"
+    ],
+    "envs": [
+        [
+            "LD_LIBRARY_PATH",
+            "/usr/local/lib/python3.12/dist-packages/nvidia/cuda_nvrtc/lib/:$LD_LIBRARY_PATH"
+        ],
+        [
+            "TORCH_CUDA_ARCH_LIST",
+            "8.0;8.0+PTX"
+        ],
+        [
+            "HF_TOKEN",
+            "TOKEN_HERE"
+        ],
+        [
+            "HF_HUB_OFFLINE",
+            "1"
+        ],
+        [
+            "VLLM_ENABLE_RESPONSES_API_STORE",
+            "1"
+        ],
+        [
+            "VLLM_GPT_OSS_SYSTEM_TOOL_MCP_LABELS",
+            "*"
+        ],
+        [
+            "VLLM_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS",
+            "1"
+        ]
+
+
+    ],
+    "mounts": [
+        {
+            "hostpath": "/opt/inferx/cache",
+            "mountpath": "/root/.cache/huggingface"
+        }
+    ],
+    "endpoint": {
+        "port": 8000,
+        "schema": "Http",
+        "probe": "/health",
+        "probeTimeout": 1000
+    },
+    "version": 2511,
+    "entrypoint": [
+        "vllm",
+        "serve"
+    ],
+    "resources": {
+        "CPU": 15000,
+        "Mem": 48000,
+        "ReadyMem": 5000,
+        "CacheMem": 5000,
+        "GPU": {
+            "Type": "Any",
+            "Count": 1,
+            "vRam": 40000,
+            "contextCount": 0
+        }
+    },
+    "standby": {
+        "gpu": "Mem",
+        "pageable": "File",
+        "pinned": "File"
+    },
+    "sample_query": {
+        "apiType": "text2text",
+        "path": "v1/completions",
+        "prompt": "def print_hello_world():",
+        "prompts": [],
+        "imageUrl": "",
+        "body": {
+            "max_tokens": "120",
+            "model": "openai/gpt-oss-20b",
+            "stream": "true",
+            "temperature": "0.7"
+        }
+    },
+    "policy": {
+        "Obj": {
+            "min_replica": 0,
+            "max_replica": 10,
+            "standby_per_node": 1,
+            "parallel": 2,
+            "queue_len": 1000,
+            "queue_timeout": 30.0,
+            "scaleout_policy": {
+                "WaitQueueRatio": {
+                    "wait_ratio": 0.1
+                }
+            },
+            "scalein_timeout": 0.01,
+            "runtime_config": {
+                "graph_sync": true
+            }
+        }
+    }
+}

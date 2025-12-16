@@ -39,7 +39,7 @@
     },
     "secretStoreAddr": "postgresql://secret:123456@secret-db:5432/secretdb",
     "keycloakconfig": {
-        "url": "http://keycloak:8080/authn",
-        "realm": "inferx"
+        "url": "https://auth.remodl.ai",
+        "realm": "remodl"
     }
 }

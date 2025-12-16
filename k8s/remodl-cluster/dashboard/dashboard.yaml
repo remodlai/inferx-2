@@ -22,13 +22,13 @@ spec:
           imagePullPolicy: Always
           env:
             - name: KEYCLOAK_URL
-              value: "https://model-gateway.remodl.ai/authn"
+              value: "https://auth.remodl.ai"
             - name: KEYCLOAK_REALM_NAME
-              value: "inferx"
+              value: "remodl"
             - name: KEYCLOAK_CLIENT_ID
-              value: "infer_client"
+              value: "inferx"
             - name: KEYCLOAK_CLIENT_SECRET
-              value: "N00QgrdKyVYLaYCKB9dLvotOJGRKI6EY"
+              value: "a6x8BeKBqhRcFU0WS3enUG8szkpgphJC"
             - name: INFERX_APIGW_ADDR
               value: "http://gateway:4000"
           volumeMounts:

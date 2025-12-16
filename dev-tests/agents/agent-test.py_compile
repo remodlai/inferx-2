@@ -1,0 +1,22 @@
+
+from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
+import asyncio
+
+model = OpenAIChatModel(
+    'mistralai/Ministral-3-14B-Reasoning-2512',
+    provider=OpenAIProvider(
+        base_url='https://model-gateway.remodl.ai/api/public/test/ministral-reasoning/v1', 
+        api_key='2158fc51-e632-441c-97e2-af334e26e656'
+    ),
+)
+
+agent = Agent(model=model)
+
+async def main():
+    result = await agent.run('What is 7 plus 5?')  # Need await
+    print(result.data)  # Access .data for the actual response
+
+# Actually run the async function
+asyncio.run(main())
