@@ -1,0 +1,307 @@
+"""
+Activities for InferX StateSvc.
+
+Activities perform the actual work (database writes, external API calls).
+They are called from workflows and can be retried on failure.
+"""
+
+from temporalio import activity
+import asyncpg
+from datetime import datetime
+from typing import Optional
+import os
+
+from .dataclasses import (
+    Tenant,
+    Namespace,
+    Function,
+    FunctionStatus,
+    NodeInfo,
+)
+
+
+# Database connection (will be initialized by worker)
+DB_POOL: Optional[asyncpg.Pool] = None
+
+
+async def get_db_pool() -> asyncpg.Pool:
+    """Get or create database connection pool to Neon PostgreSQL"""
+    global DB_POOL
+    if DB_POOL is None:
+        # Connect to Neon PostgreSQL (shared with LiteLLM, separate schema for InferX)
+        connection_string = os.getenv(
+            "DATABASE_URL",
+            "postgresql://neondb_owner:npg_YIynbl1f3MUc@ep-autumn-king-a4xm63yd-pooler.us-east-1.aws.neon.tech/litellm?sslmode=require"
+        )
+        DB_POOL = await asyncpg.create_pool(
+            connection_string,
+            min_size=2,
+            max_size=10,
+            server_settings={'search_path': 'inferx,public'},
+        )
+    return DB_POOL
+
+
+# ==================== Tenant Activities ====================
+
+@activity.defn
+async def create_tenant_and_grant_role(tenant: Tenant, creator_username: str) -> int:
+    """
+    Create tenant in PostgreSQL and grant admin role to creator.
+
+    Returns: revision number
+    """
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            # Insert tenant
+            await conn.execute("""
+                INSERT INTO tenants (name, spec, disabled, created_at)
+                VALUES ($1, $2, $3, NOW())
+                ON CONFLICT (name) DO NOTHING
+            """, tenant.name, tenant.object.model_dump_json(), tenant.object.status.disable)
+
+            # Grant admin role to creator
+            role_name = f"/tenant/admin/{tenant.name}"
+            await conn.execute("""
+                INSERT INTO userrole (username, rolename)
+                VALUES ($1, $2)
+                ON CONFLICT (username, rolename) DO NOTHING
+            """, creator_username, role_name)
+
+            # Return revision (just use timestamp as revision for now)
+            revision = int(datetime.now().timestamp() * 1000)
+            return revision
+
+
+@activity.defn
+async def delete_tenant(tenant_name: str) -> int:
+    """Delete tenant and cascade delete associated roles"""
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            # Delete tenant
+            await conn.execute("DELETE FROM tenants WHERE name = $1", tenant_name)
+
+            # Delete associated roles
+            await conn.execute("""
+                DELETE FROM userrole
+                WHERE rolename LIKE $1
+            """, f"/tenant/%/{tenant_name}%")
+
+            revision = int(datetime.now().timestamp() * 1000)
+            return revision
+
+
+# ==================== Namespace Activities ====================
+
+@activity.defn
+async def create_namespace(namespace: Namespace) -> int:
+    """Create namespace in PostgreSQL"""
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO namespaces (tenant, name, spec, disabled, created_at)
+            VALUES ($1, $2, $3, $4, NOW())
+            ON CONFLICT (tenant, name) DO NOTHING
+        """, namespace.tenant, namespace.name, namespace.object.model_dump_json(), namespace.object.status.disable)
+
+        revision = int(datetime.now().timestamp() * 1000)
+        return revision
+
+
+@activity.defn
+async def update_namespace(namespace: Namespace) -> int:
+    """Update namespace in PostgreSQL"""
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            UPDATE namespaces
+            SET spec = $1, disabled = $2, updated_at = NOW()
+            WHERE tenant = $3 AND name = $4
+        """, namespace.object.model_dump_json(), namespace.object.status.disable, namespace.tenant, namespace.name)
+
+        revision = int(datetime.now().timestamp() * 1000)
+        return revision
+
+
+@activity.defn
+async def delete_namespace(tenant: str, namespace: str) -> int:
+    """Delete namespace from PostgreSQL"""
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            DELETE FROM namespaces WHERE tenant = $1 AND name = $2
+        """, tenant, namespace)
+
+        revision = int(datetime.now().timestamp() * 1000)
+        return revision
+
+
+# ==================== Function Activities ====================
+
+@activity.defn
+async def create_function(function: Function) -> int:
+    """Create function in PostgreSQL"""
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO functions (tenant, namespace, name, version, spec, created_at)
+            VALUES ($1, $2, $3, $4, $5, NOW())
+            ON CONFLICT (tenant, namespace, name, version) DO NOTHING
+        """, function.tenant, function.namespace, function.name,
+            function.object.spec.version, function.object.model_dump_json())
+
+        revision = int(datetime.now().timestamp() * 1000)
+        return revision
+
+
+@activity.defn
+async def update_function(function: Function) -> int:
+    """Update function in PostgreSQL"""
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            UPDATE functions
+            SET spec = $1, updated_at = NOW()
+            WHERE tenant = $2 AND namespace = $3 AND name = $4 AND version = $5
+        """, function.object.model_dump_json(), function.tenant, function.namespace,
+            function.name, function.object.spec.version)
+
+        revision = int(datetime.now().timestamp() * 1000)
+        return revision
+
+
+@activity.defn
+async def delete_function(tenant: str, namespace: str, name: str, version: int) -> int:
+    """Delete function from PostgreSQL"""
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            DELETE FROM functions
+            WHERE tenant = $1 AND namespace = $2 AND name = $3 AND version = $4
+        """, tenant, namespace, name, version)
+
+        revision = int(datetime.now().timestamp() * 1000)
+        return revision
+
+
+# ==================== Function Status Activities ====================
+
+@activity.defn
+async def create_function_status(status: FunctionStatus) -> int:
+    """Create function status in PostgreSQL"""
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO function_status (tenant, namespace, name, version, state,
+                                        snapshoting_failure_cnt, resuming_failure_cnt, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+            ON CONFLICT (tenant, namespace, name, version)
+            DO UPDATE SET state = $5,
+                         snapshoting_failure_cnt = $6,
+                         resuming_failure_cnt = $7,
+                         updated_at = NOW()
+        """, status.tenant, status.namespace, status.name, status.object.version,
+            status.object.state, status.object.snapshotingFailureCnt, status.object.resumingFailureCnt)
+
+        revision = int(datetime.now().timestamp() * 1000)
+        return revision
+
+
+@activity.defn
+async def update_function_status(status: FunctionStatus) -> int:
+    """Update function status in PostgreSQL"""
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            UPDATE function_status
+            SET state = $1,
+                snapshoting_failure_cnt = $2,
+                resuming_failure_cnt = $3,
+                updated_at = NOW()
+            WHERE tenant = $4 AND namespace = $5 AND name = $6 AND version = $7
+        """, status.object.state, status.object.snapshotingFailureCnt, status.object.resumingFailureCnt,
+            status.tenant, status.namespace, status.name, status.object.version)
+
+        revision = int(datetime.now().timestamp() * 1000)
+        return revision
+
+
+# ==================== Node Activities ====================
+
+@activity.defn
+async def register_node(node: NodeInfo) -> int:
+    """Register node in PostgreSQL"""
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO nodes (name, node_ip, na_ip, agent_url, spec, state, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, NOW())
+            ON CONFLICT (name)
+            DO UPDATE SET node_ip = $2,
+                         na_ip = $3,
+                         agent_url = $4,
+                         spec = $5,
+                         state = $6,
+                         updated_at = NOW()
+        """, node.name, node.object.nodeIp, node.object.naIp,
+            f"http://{node.object.naIp}:{node.object.podMgrPort}",
+            node.object.model_dump_json(), node.object.state)
+
+        revision = int(datetime.now().timestamp() * 1000)
+        return revision
+
+
+@activity.defn
+async def update_node_state(node_name: str, state: str) -> int:
+    """Update node state"""
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            UPDATE nodes
+            SET state = $1, updated_at = NOW()
+            WHERE name = $2
+        """, state, node_name)
+
+        revision = int(datetime.now().timestamp() * 1000)
+        return revision
+
+
+# ==================== Grant Permissions ====================
+
+@activity.defn
+async def grant_tenant_admin_role(tenant_name: str, username: str) -> None:
+    """Grant tenant admin role to user"""
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        role_name = f"/tenant/admin/{tenant_name}"
+        await conn.execute("""
+            INSERT INTO userrole (username, rolename)
+            VALUES ($1, $2)
+            ON CONFLICT (username, rolename) DO NOTHING
+        """, username, role_name)
+
+
+@activity.defn
+async def grant_namespace_admin_role(tenant_name: str, namespace: str, username: str) -> None:
+    """Grant namespace admin role to user"""
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        role_name = f"/namespace/admin/{tenant_name}/{namespace}"
+        await conn.execute("""
+            INSERT INTO userrole (username, rolename)
+            VALUES ($1, $2)
+            ON CONFLICT (username, rolename) DO NOTHING
+        """, username, role_name)
+
+
+@activity.defn
+async def revoke_role(username: str, role_name: str) -> None:
+    """Revoke role from user"""
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            DELETE FROM userrole
+            WHERE username = $1 AND rolename = $2
+        """, username, role_name)
