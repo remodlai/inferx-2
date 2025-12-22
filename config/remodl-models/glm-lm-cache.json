@@ -1,25 +1,21 @@
 {
-    "image": "remodlai/vllm-openai-mcp:v0.12.0",
+    "image": "remodlai/vllm-openai-mcp-tf-lm-cache:latest",
     "commands": [
-        "/root/.cache/huggingface/hub/models--mistralai--Ministral-3-14B-Reasoning-2512/snapshots/7efc3c14cb5b7076a88967f15634fd8515cd823a",
+        "/root/.cache/huggingface/hub/models--zai-org--GLM-4.6V-Flash/snapshots/411bb4d77144a3f03accbf4b780f5acb8b7cde4e",
         "--trust-remote-code",
-        "--max-model-len",
-        "50000",
-        "--tokenizer_mode",
-        "mistral",
-        "--config_format",
-        "mistral",
-        "--load_format",
-        "mistral",
-        "--enable-auto-tool-choice",
-        "--tool-call-parser",
-        "mistral",
-        "--reasoning-parser",
-        "mistral",
         "--served-model-name",
-        "mistralai/Ministral-3-14B-Reasoning-2512",
-        "--tool-server",
-        "mcp.remodl.ai"
+        "GLM-4.6V-Flash",
+        "--tool-call-parser",
+        "glm45",
+        "--reasoning-parser",
+        "glm45",
+        "--enable-auto-tool-choice",
+        "--mm-processor-cache-type",
+        "shm",
+        "--max-num-batched-tokens",
+        "8192",
+        "--kv-transfer-config",
+        "{\"kv_connector\":\"LMCacheConnectorV1\", \"kv_role\":\"kv_both\"}"
     ],
     "envs": [
         [
@@ -31,12 +27,36 @@
             "8.0;8.0+PTX"
         ],
         [
+            "VLLM_VERBOSE",
+            "1"
+        ],
+        [
+            "VERBOSE",
+            "1"
+        ],
+        [
             "HF_TOKEN",
             "TOKEN"
         ],
         [
             "HF_HUB_OFFLINE",
             "1"
+        ],
+        [
+            "LMCACHE_CONF   IG_FILE",
+            "/root/.cache/huggingface/lmcache-config.yaml"
+        ],
+        [
+            "LMCACHE_USE_EXPERIMENTAL",
+            "True"
+        ],
+        [
+            "PYTHONHASHSEED",
+            "0"
+        ],
+        [
+            "VLLM_LOGGING_LEVEL",
+            "DEBUG"
         ]
     ],
     "mounts": [
@@ -51,27 +71,26 @@
         "probe": "/health",
         "probeTimeout": 1000
     },
-    "version": 8458,
+    "version": 9458,
     "entrypoint": [
-        "vllm",
-        "serve"
+        "/root/.cache/huggingface/lmcache-entrypoint.sh"
     ],
     "resources": {
         "CPU": 15000,
-        "Mem": 36000,
-        "ReadyMem": 1000,
+        "Mem": 30000,
+        "ReadyMem": 5000,
         "CacheMem": 5000,
         "GPU": {
             "Type": "Any",
             "Count": 1,
-            "vRam": 36000,
+            "vRam": 40000,
             "contextCount": 0
         }
     },
     "standby": {
-        "gpu": "Mem",
+        "gpu": "File",
         "pageable": "File",
-        "pinned": "File"
+        "pinned": "Mem"
     },
     "sample_query": {
         "apiType": "text2text",
@@ -81,7 +100,7 @@
         "imageUrl": "",
         "body": {
             "max_tokens": "120",
-            "model": "mistralai/Ministral-3-14B-Reasoning-2512",
+            "model": "GLM-4.6V-Flash",
             "stream": "true",
             "temperature": "0.7"
         }
