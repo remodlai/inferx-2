@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: statesvc-temporal
+  namespace: inferx
+  labels:
+    app: statesvc-temporal
+    component: statesvc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: statesvc-temporal
+  template:
+    metadata:
+      labels:
+        app: statesvc-temporal
+        component: statesvc
+    spec:
+      containers:
+      - name: statesvc
+        image: remodlai/inferx-statesvc:latest
+        imagePullPolicy: Always
+        ports:
+        - name: grpc
+          containerPort: 1237
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: statesvc-config
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: statesvc-secrets
+              key: database-url
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+        livenessProbe:
+          exec:
+            command: ["sh", "-c", "ps aux | grep -v grep | grep -q 'python -m src.main'"]
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          tcpSocket:
+            port: 1237
+          initialDelaySeconds: 10
+          periodSeconds: 5
