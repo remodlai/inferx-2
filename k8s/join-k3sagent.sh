@@ -16,9 +16,31 @@ sudo k3s agent --docker \
   --server https://100.65.227.120:6443 \
   --token K10f34afe5ee273ea04d1d3ad746e1b19ae135b1cf27b10d396ad9f0436a81819c8::server:a0386b56edc4a846e2a085b7920b6d89 \
   --with-node-id \
-  --node-name inferx-agent1 \
+
   --debug
 
 
 # sudo k3s agent --docker --server https://192.168.0.22:6443 --token K106218814e0f9ea4c0b067750e725aee4a2921804a6867b625abb51b5c11149e9a::server:5401cee22c6fd5315c24574784b8d8a1 --debug
 
+curl -sfL https://get.k3s.io | K3S_URL=https://100.65.227.120:6443 \
+    K3S_TOKEN=K10f34afe5ee273ea04d1d3ad746e1b19ae135b1cf27b10d396ad9f0436a81819c8::server:a0386b56edc4a846e2a085b7920b6d89 \
+    INSTALL_K3S_EXEC="--docker --with-node-id" sh -
+
+    curl -sfL https://get.k3s.io | K3S_URL=https://100.65.227.120:6443 \
+    K3S_TOKEN=K10f34afe5ee273ea04d1d3ad746e1b19ae135b1cf27b10d396ad9f0436a81819c8::server:a0386b56edc4a846e2a085b7920b6d89 \
+    INSTALL_K3S_EXEC="--docker --with-node-id" sh -lsb_release -a
+
+node-external-ip: 100.116.245.115
+flannel-iface: ens3
+node-name: gpu-worker-2  # Set appropriate name
+kubelet-arg:
+  - "node-labels=topology.kubernetes.io/zone=hyperstack"
+  - "node-labels=topology.kubernetes.io/region=hyperstack"
+  - "node-labels=node.kubernetes.io/instance-type=gpu"
+  - "node-labels=inferx_nodeType=inferx_file"
+  - "node-labels=inferx_storage=data"
+  - "node-labels=cloud=hyperstack"
+  - "node-labels=gpu.type=l40"
+  - "node-labels=gpu.count=1"
+  - "node-labels=nvlink=false"
+  - "register-with-taints=nvidia.com/gpu=true:NoSchedule"

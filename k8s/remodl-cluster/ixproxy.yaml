@@ -67,7 +67,7 @@ spec:
           - name: ENABLE_2MB_PAGE
             value: "false"  
           - name: CONTEXT_OVERHEAD
-            value: "1500"   
+            value: "2000"   
           - name: CONTEXT_COUNT
             value: "1"      
           - name: ALLOC_CPU

@@ -159,8 +159,8 @@ runkblob:
 	kubectl apply -f k8s/remodl-cluster/statesvc/statesvc.yaml | sudo kubectl apply -f -
 	kubectl apply -f k8s/remodl-cluster/gateway/gateway.yaml | kubectl apply -f -
 	kubectl apply -f k8s/remodl-cluster/scheduler/scheduler_with_remodl_node_selector.yaml 
-	VERSION=v0.1.15.beta17 envsubst < k8s/remodl-cluster/ixproxy-test.yaml |  kubectl apply -f -
-	VERSION=v0.1.15.beta17 envsubst < k8s/remodl-cluster/nodeagent.yaml | kubectl apply -f -
+	VERSION=v0.1.15.beta27 envsubst < k8s/remodl-cluster/ixproxy-test.yaml |  kubectl apply -f -
+	VERSION=v0.1.15.beta27 envsubst < k8s/remodl-cluster/nodeagent.yaml | kubectl apply -f -
 	kubectl apply -f k8s/remodl-cluster/dashboard/dashboard.yaml
 	# sudo kubectl apply -f k8s/dashboard.yaml
 	sudo kubectl apply -f k8s/ingress.yaml
