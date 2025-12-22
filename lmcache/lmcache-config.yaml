@@ -1,0 +1,21 @@
+# LMCache Configuration for InferX vLLM containers
+# This file is mounted from /opt/inferx/cache/lmcache-config.yaml
+# Set via: LMCACHE_CONFIG_FILE=/root/.cache/huggingface/lmcache-config.yaml
+
+# KV Cache Chunking
+chunk_size: 8  # Small chunks for testing
+
+# CPU RAM Hot Cache
+local_cpu: true  # Required as intermediate buffer
+max_local_cpu_size: 2  # 0.5GB - small to force Redis eviction quickly
+
+# Remote Storage (Redis)
+remote_url: "redis://:remodlLMcache321@13.222.64.160:6379"
+remote_serde: "naive"  # Uncompressed (cachegen not compatible with GLM-4.6V)
+
+# Optimizations
+use_layerwise: false  # Causes StopIteration errors with this model
+enable_async_loading: false  # Disable to avoid hanging issues
+
+# Controller (disabled for single-instance testing)
+enable_controller: false
