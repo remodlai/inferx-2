@@ -21,7 +21,7 @@ async def create_tenant_and_grant_role(tenant: Tenant, creator_username: str) ->
         async with conn.transaction():
             # Insert tenant
             await conn.execute("""
-                INSERT INTO tenants (name, spec, disabled, created_at)
+                INSERT INTO inferx.tenants (name, spec, disabled, created_at)
                 VALUES ($1, $2, $3, NOW())
                 ON CONFLICT (name) DO NOTHING
             """, tenant.name, tenant.object.model_dump_json(), tenant.object.status.disable)
@@ -29,7 +29,7 @@ async def create_tenant_and_grant_role(tenant: Tenant, creator_username: str) ->
             # Grant admin role to creator
             role_name = f"/tenant/admin/{tenant.name}"
             await conn.execute("""
-                INSERT INTO userrole (username, rolename)
+                INSERT INTO inferx.userrole (username, rolename)
                 VALUES ($1, $2)
                 ON CONFLICT (username, rolename) DO NOTHING
             """, creator_username, role_name)
@@ -46,11 +46,11 @@ async def delete_tenant(tenant_name: str) -> int:
     async with pool.acquire() as conn:
         async with conn.transaction():
             # Delete tenant
-            await conn.execute("DELETE FROM tenants WHERE name = $1", tenant_name)
+            await conn.execute("DELETE FROM inferx.tenants WHERE name = $1", tenant_name)
 
             # Delete associated roles
             await conn.execute("""
-                DELETE FROM userrole
+                DELETE FROM inferx.userrole
                 WHERE rolename LIKE $1
             """, f"/tenant/%/{tenant_name}%")
 
@@ -65,7 +65,7 @@ async def grant_tenant_admin_role(tenant_name: str, username: str) -> None:
     async with pool.acquire() as conn:
         role_name = f"/tenant/admin/{tenant_name}"
         await conn.execute("""
-            INSERT INTO userrole (username, rolename)
+            INSERT INTO inferx.userrole (username, rolename)
             VALUES ($1, $2)
             ON CONFLICT (username, rolename) DO NOTHING
         """, username, role_name)
@@ -78,6 +78,6 @@ async def revoke_tenant_admin_role(tenant_name: str, username: str) -> None:
     async with pool.acquire() as conn:
         role_name = f"/tenant/admin/{tenant_name}"
         await conn.execute("""
-            DELETE FROM userrole
+            DELETE FROM inferx.userrole
             WHERE username = $1 AND rolename = $2
         """, username, role_name)

@@ -15,7 +15,7 @@ async def create_function_status(status: FunctionStatus) -> int:
     pool = await get_db_pool()
     async with pool.acquire() as conn:
         await conn.execute("""
-            INSERT INTO function_status (tenant, namespace, name, version, state,
+            INSERT INTO inferx.function_status (tenant, namespace, name, version, state,
                                         snapshoting_failure_cnt, resuming_failure_cnt, created_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
             ON CONFLICT (tenant, namespace, name, version)
@@ -36,7 +36,7 @@ async def update_function_status(status: FunctionStatus) -> int:
     pool = await get_db_pool()
     async with pool.acquire() as conn:
         await conn.execute("""
-            UPDATE function_status
+            UPDATE inferx.function_status
             SET state = $1,
                 snapshoting_failure_cnt = $2,
                 resuming_failure_cnt = $3,

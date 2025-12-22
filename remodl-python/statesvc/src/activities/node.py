@@ -15,7 +15,7 @@ async def register_node(node: NodeInfo) -> int:
     pool = await get_db_pool()
     async with pool.acquire() as conn:
         await conn.execute("""
-            INSERT INTO nodes (name, node_ip, na_ip, agent_url, spec, state, created_at)
+            INSERT INTO inferx.nodes (name, node_ip, na_ip, agent_url, spec, state, created_at)
             VALUES ($1, $2, $3, $4, $5, $6, NOW())
             ON CONFLICT (name)
             DO UPDATE SET node_ip = $2,
@@ -38,7 +38,7 @@ async def update_node_state(node_name: str, state: str) -> int:
     pool = await get_db_pool()
     async with pool.acquire() as conn:
         await conn.execute("""
-            UPDATE nodes
+            UPDATE inferx.nodes
             SET state = $1, updated_at = NOW()
             WHERE name = $2
         """, state, node_name)
@@ -52,7 +52,7 @@ async def delete_node(node_name: str) -> int:
     """Delete node from PostgreSQL"""
     pool = await get_db_pool()
     async with pool.acquire() as conn:
-        await conn.execute("DELETE FROM nodes WHERE name = $1", node_name)
+        await conn.execute("DELETE FROM inferx.nodes WHERE name = $1", node_name)
 
         revision = int(datetime.now().timestamp() * 1000)
         return revision

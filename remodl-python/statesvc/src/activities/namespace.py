@@ -15,7 +15,7 @@ async def create_namespace(namespace: Namespace) -> int:
     pool = await get_db_pool()
     async with pool.acquire() as conn:
         await conn.execute("""
-            INSERT INTO namespaces (tenant, name, spec, disabled, created_at)
+            INSERT INTO inferx.namespaces (tenant, name, spec, disabled, created_at)
             VALUES ($1, $2, $3, $4, NOW())
             ON CONFLICT (tenant, name) DO NOTHING
         """, namespace.tenant, namespace.name, namespace.object.model_dump_json(), namespace.object.status.disable)
@@ -30,7 +30,7 @@ async def update_namespace(namespace: Namespace) -> int:
     pool = await get_db_pool()
     async with pool.acquire() as conn:
         await conn.execute("""
-            UPDATE namespaces
+            UPDATE inferx.namespaces
             SET spec = $1, disabled = $2, updated_at = NOW()
             WHERE tenant = $3 AND name = $4
         """, namespace.object.model_dump_json(), namespace.object.status.disable, namespace.tenant, namespace.name)
@@ -45,7 +45,7 @@ async def delete_namespace(tenant: str, namespace: str) -> int:
     pool = await get_db_pool()
     async with pool.acquire() as conn:
         await conn.execute("""
-            DELETE FROM namespaces WHERE tenant = $1 AND name = $2
+            DELETE FROM inferx.namespaces WHERE tenant = $1 AND name = $2
         """, tenant, namespace)
 
         revision = int(datetime.now().timestamp() * 1000)
@@ -59,7 +59,7 @@ async def grant_namespace_admin_role(tenant_name: str, namespace: str, username:
     async with pool.acquire() as conn:
         role_name = f"/namespace/admin/{tenant_name}/{namespace}"
         await conn.execute("""
-            INSERT INTO userrole (username, rolename)
+            INSERT INTO inferx.userrole (username, rolename)
             VALUES ($1, $2)
             ON CONFLICT (username, rolename) DO NOTHING
         """, username, role_name)
