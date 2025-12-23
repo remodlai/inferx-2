@@ -13,7 +13,8 @@ from typing import Dict, List, Optional
 with workflow.unsafe.imports_passed_through():
     from inferx_common.models import (
         Tenant, Namespace, Function, FunctionStatus, NodeInfo,
-        TenantObject, NamespaceObject, FunctionObject, FunctionStatusDef
+        TenantObject, NamespaceObject, FunctionObject, FunctionStatusDef,
+        FuncPolicy, SchedulerInfo, FuncPod, ContainerSnapshot
     )
     from .activities import (
         # Tenant
