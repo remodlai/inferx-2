@@ -15,6 +15,9 @@ from .function import (
     VolumeMount, FunctionSpec, FunctionObject, Function, FuncPolicy
 )
 from .function_status import FunctionStatusDef, FunctionStatus
+from .scheduler import (
+    WorkerId, PodInfo, GatewayConnection, NodeResourceTracking
+)
 
 
 # Grouped exports for StateSvc
@@ -42,6 +45,8 @@ scheduler_models = [
     # Resource tracking
     GPUResourceMap, GPUAlloc, GPUResourceSpec,
     ResourceSpec, FuncPolicySpec,
+    # Scheduler-specific
+    WorkerId, PodInfo, GatewayConnection, NodeResourceTracking,
 ]
 
 
@@ -60,6 +65,8 @@ __all__ = [
     "VolumeMount", "FunctionSpec", "FunctionObject", "Function", "FuncPolicy",
     # Function Status
     "FunctionStatusDef", "FunctionStatus",
+    # Scheduler
+    "WorkerId", "PodInfo", "GatewayConnection", "NodeResourceTracking",
     # Grouped exports
     "statesvc_models",
     "scheduler_models",

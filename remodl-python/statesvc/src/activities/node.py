@@ -5,7 +5,7 @@ Node-related activities for StateSvc.
 from temporalio import activity
 from datetime import datetime
 
-from ..dataclasses import NodeInfo
+from inferx_common.models import NodeInfo
 from .shared import get_db_pool
 
 

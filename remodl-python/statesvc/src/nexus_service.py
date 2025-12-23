@@ -9,7 +9,7 @@ import nexusrpc
 from typing import Optional, List
 
 # Import through passthrough if needed in handlers
-from .dataclasses import (
+from inferx_common.models import (
     Tenant, Namespace, Function, FunctionStatus, NodeInfo
 )
 

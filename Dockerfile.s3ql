@@ -1,9 +1,9 @@
 # Dockerfile.s3ql
 # Extends upstream inferx_na image with S3QL filesystem support
-# Base: inferx/inferx_na:v0.1.5.beta17
-# Output: remodlai/inferx_na:v0.1.5.beta17-s3ql
+# Base: inferx/inferx_na:v0.1.5.beta37
+# Output: remodlai/inferx_na:v0.1.5.beta37-s3ql
 
-FROM inferx/inferx_na:v0.1.5.beta17
+FROM inferx/inferx_na:v0.1.5.beta37
 
 # Install S3QL dependencies and uv package manager
 RUN apt-get update && \
@@ -91,7 +91,7 @@ WORKDIR /
 # Labels
 LABEL maintainer="Remodl AI Infrastructure Team"
 LABEL description="InferX NodeAgent with S3QL filesystem support and Python 3.12"
-LABEL base-image="inferx/inferx_na:v0.1.5.beta17"
+LABEL base-image="inferx/inferx_na:v0.1.5.beta37"
 LABEL python-version="3.8"
 LABEL s3ql-version="5.4.1"
 LABEL huggingface-hub="installed"

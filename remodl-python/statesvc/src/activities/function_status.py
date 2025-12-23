@@ -5,7 +5,7 @@ Function status activities for StateSvc.
 from temporalio import activity
 from datetime import datetime
 
-from ..dataclasses import FunctionStatus
+from inferx_common.models import FunctionStatus
 from .shared import get_db_pool
 
 

@@ -21,7 +21,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: ixproxy
-          image: remodlai/inferx_na:v0.1.5.beta17-s3ql
+          image: remodlai/inferx_na:v0.1.5.beta37-s3ql
           imagePullPolicy: IfNotPresent
           livenessProbe:
             httpGet:

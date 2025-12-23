@@ -15,7 +15,7 @@ import os
 # Import through sandbox for workflow
 with workflow.unsafe.imports_passed_through():
     from .nexus_service import StateSvcNexusService
-    from .dataclasses import (
+    from inferx_common.models import (
         Tenant, TenantObject, TenantSpec, TenantStatus,
         Namespace, NamespaceObject, NamespaceSpec, NamespaceStatus,
         NodeInfo, NodeSpec, NodeResources, GPUResourceMap, GPUAlloc,

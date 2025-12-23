@@ -20,7 +20,7 @@ spec:
       hostPID: true
       containers:
         - name: gateway
-          image: remodlai/inferx_platform:v0.1.5.beta21
+          image: inferx/inferx_platform:v0.1.5.beta37
           imagePullPolicy: IfNotPresent
           livenessProbe:          # <-- Kubernetes keepalive check
             httpGet:
@@ -42,7 +42,7 @@ spec:
           - name: INFERX_ADMIN_APIKEY
             value: 87831cdb-d07a-4dc1-9de0-fb232c9bf286
           - name: STATESVC_ADDR
-            value: "http://statesvc:1237"
+            value: "http://statesvc-temporal:1237"
           - name: ETCD_ADDRS
             value: "http://etcd:2379"
           - name: KEYCLOAK_REALM

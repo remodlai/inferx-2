@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 
 # Import through sandbox
 with workflow.unsafe.imports_passed_through():
-    from .dataclasses import (
+    from inferx_common.models import (
         Tenant, Namespace, Function, FunctionStatus, NodeInfo,
         TenantObject, NamespaceObject, FunctionObject, FunctionStatusDef
     )
@@ -55,7 +55,7 @@ class StateSvcWorkflow:
 
         # Metadata
         self.version = "0.2.0-temporal"
-        self.svc_ip = "0.0.0.0"  # Will be actual pod IP in production
+        self.svc_ip = "statesvc-temporal"  # Return service name, not IP
         self.svc_port = 1237
         self.uid_counter = 10000  # Monotonic counter
 

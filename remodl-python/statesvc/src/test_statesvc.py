@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 import os
 
 from .workflows import StateSvcWorkflow
-from .dataclasses import (
+from inferx_common.models import (
     Tenant, TenantObject, TenantSpec, TenantStatus,
     Namespace, NamespaceObject, NamespaceSpec, NamespaceStatus,
 )

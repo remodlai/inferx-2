@@ -7,6 +7,9 @@ set -e
 IMAGE_NAME="remodlai/inferx-statesvc"
 TAG="${1:-latest}"
 
+# Change to parent directory to include inferx-common in build context
+cd "$(dirname "$0")/.."
+
 echo "Building $IMAGE_NAME:$TAG for linux/amd64..."
 
 # Build for linux/amd64 (for EKS/x86_64 nodes)
@@ -14,6 +17,7 @@ docker buildx build \
     --platform linux/amd64 \
     -t $IMAGE_NAME:$TAG \
     --load \
+    -f statesvc/Dockerfile \
     .
 
 echo "✅ Build complete: $IMAGE_NAME:$TAG"

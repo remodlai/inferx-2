@@ -5,7 +5,7 @@ Function-related activities for StateSvc.
 from temporalio import activity
 from datetime import datetime
 
-from ..dataclasses import Function
+from inferx_common.models import Function
 from .shared import get_db_pool
 
 

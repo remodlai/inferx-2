@@ -16,7 +16,7 @@ import json
 
 from .generated import ixmeta_pb2, ixmeta_pb2_grpc
 from .workflows import StateSvcWorkflow
-from .dataclasses import (
+from inferx_common.models import (
     Tenant, TenantObject, Namespace, NamespaceObject,
     Function, FunctionObject, FunctionStatus, NodeInfo, NodeSpec
 )
@@ -50,14 +50,14 @@ class IxMetaServiceServicer(ixmeta_pb2_grpc.IxMetaServiceServicer):
             addr = await self.workflow_handle.query(StateSvcWorkflow.get_addr)
             return ixmeta_pb2.GetAddrReponseMessage(
                 error="",
-                svc_ip=addr["svcIp"],
+                svcIp=addr["svcIp"],
                 port=addr["port"]
             )
         except Exception as e:
             logger.error(f"GetAddr error: {e}")
             return ixmeta_pb2.GetAddrReponseMessage(
                 error=str(e),
-                svc_ip="",
+                svcIp="",
                 port=0
             )
 
@@ -314,6 +314,47 @@ class IxMetaServiceServicer(ixmeta_pb2_grpc.IxMetaServiceServicer):
                     revision=node.revision or 0,
                     data=node.object.model_dump_json()
                 )
+
+            elif obj_type == "funcstatus":
+                # Need version from request - for now get latest
+                func = await self.workflow_handle.query(
+                    StateSvcWorkflow.get_function,
+                    args=[request.tenant, request.namespace, request.name, None]
+                )
+                if not func:
+                    return ixmeta_pb2.GetResponseMessage(error="Not found", obj=None)
+
+                status = await self.workflow_handle.query(
+                    StateSvcWorkflow.get_function_status,
+                    args=[request.tenant, request.namespace, request.name, func.object.spec.version]
+                )
+                if not status:
+                    return ixmeta_pb2.GetResponseMessage(error="Not found", obj=None)
+
+                obj = ixmeta_pb2.Obj(
+                    kind=obj_type,
+                    tenant=status.tenant,
+                    namespace=status.namespace,
+                    name=status.name,
+                    revision=status.revision or 0,
+                    data=status.object.model_dump_json()
+                )
+
+            elif obj_type == "funcpolicy":
+                # FuncPolicy not implemented yet - return empty
+                return ixmeta_pb2.GetResponseMessage(error="", obj=None)
+
+            elif obj_type == "scheduler":
+                # Scheduler registration - return empty for now
+                return ixmeta_pb2.GetResponseMessage(error="", obj=None)
+
+            elif obj_type == "pod":
+                # Pod info from NodeAgent - return empty
+                return ixmeta_pb2.GetResponseMessage(error="", obj=None)
+
+            elif obj_type == "snapshot":
+                # Snapshot info from NodeAgent - return empty
+                return ixmeta_pb2.GetResponseMessage(error="", obj=None)
 
             else:
                 return ixmeta_pb2.GetResponseMessage(

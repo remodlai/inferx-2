@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scheduler-config
+  namespace: default
+data:
+  # Temporal connection
+  TEMPORAL_TARGET_HOST: "flow.remodl.ai:443"
+  TEMPORAL_NAMESPACE: "inferx"
+  TEMPORAL_TLS: "true"
+  TEMPORAL_TASK_QUEUE: "scheduler-tasks"
+
+  # Scheduler configuration
+  SCHEDULER_PORT: "1238"
+
+  # Logging
+  LOG_LEVEL: "INFO"

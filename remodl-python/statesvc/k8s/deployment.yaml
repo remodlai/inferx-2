@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: statesvc-temporal
-  namespace: inferx
+  namespace: default
   labels:
     app: statesvc-temporal
     component: statesvc
@@ -17,6 +17,9 @@ spec:
         app: statesvc-temporal
         component: statesvc
     spec:
+      hostPID: true
+      nodeSelector:
+        inferx-cpu-worker: "true"
       containers:
       - name: statesvc
         image: remodlai/inferx-statesvc:latest
@@ -29,6 +32,10 @@ spec:
         - configMapRef:
             name: statesvc-config
         env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
@@ -42,8 +49,8 @@ spec:
             cpu: "1000m"
             memory: "2Gi"
         livenessProbe:
-          exec:
-            command: ["sh", "-c", "ps aux | grep -v grep | grep -q 'python -m src.main'"]
+          tcpSocket:
+            port: 1237 # temporal port for health check
           initialDelaySeconds: 30
           periodSeconds: 10
           failureThreshold: 3
@@ -52,3 +59,10 @@ spec:
             port: 1237
           initialDelaySeconds: 10
           periodSeconds: 5
+        volumeMounts:
+        - mountPath: /opt/inferx/log
+          name: opt-inferx-log
+      volumes:
+      - name: opt-inferx-log
+        hostPath:
+          path: /opt/inferx/log

@@ -11,7 +11,7 @@ from typing import Optional, List
 
 from .nexus_service import StateSvcNexusService
 from .workflows import StateSvcWorkflow
-from .dataclasses import (
+from inferx_common.models import (
     Tenant, Namespace, Function, FunctionStatus, NodeInfo
 )
 

@@ -5,7 +5,7 @@ Namespace-related activities for StateSvc.
 from temporalio import activity
 from datetime import datetime
 
-from ..dataclasses import Namespace
+from inferx_common.models import Namespace
 from .shared import get_db_pool
 
 

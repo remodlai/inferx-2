@@ -5,7 +5,7 @@ Tenant-related activities for StateSvc.
 from temporalio import activity
 from datetime import datetime
 
-from ..dataclasses import Tenant
+from inferx_common.models import Tenant
 from .shared import get_db_pool
 
 

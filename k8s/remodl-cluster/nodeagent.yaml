@@ -17,7 +17,7 @@ spec:
         inferx_nodeType: inferx_blob      
       containers:
         - name: nodeagent
-          image: inferx/inferx_na:v0.1.5.beta17
+          image: inferx/inferx_na:v0.1.5.beta37
           imagePullPolicy: IfNotPresent
           securityContext:
             privileged: true
@@ -167,7 +167,7 @@ spec:
       #       ]
       containers:
         - name: nodeagent
-          image: inferx/inferx_na:v0.1.5.beta20
+          image: inferx/inferx_na:v0.1.5.beta37
           imagePullPolicy: IfNotPresent
           securityContext:
             privileged: true
@@ -178,7 +178,7 @@ spec:
           env:
           
           - name: STATESVC_ADDR
-            value: "http://statesvc:1237"
+            value: "http://statesvc-temporal:1237"
           - name: RUN_SERVICE
             value: "NodeAgent"
           - name: ENABLE_COREDUMP

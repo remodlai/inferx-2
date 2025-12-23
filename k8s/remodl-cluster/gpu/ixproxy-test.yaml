@@ -21,7 +21,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: ixproxy
-          image: inferx/inferx_na:v0.1.5.beta17
+          image: inferx/inferx_na:v0.1.5.beta37
           imagePullPolicy: IfNotPresent
           livenessProbe:          # <-- Kubernetes keepalive check
             exec:
