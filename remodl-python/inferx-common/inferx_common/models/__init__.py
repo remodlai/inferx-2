@@ -18,6 +18,9 @@ from .function_status import FunctionStatusDef, FunctionStatus
 from .scheduler import (
     WorkerId, PodInfo, GatewayConnection, NodeResourceTracking
 )
+from .scheduler_info import SchedulerInfo
+from .pod import FuncPod
+from .snapshot import ContainerSnapshot
 
 
 # Grouped exports for StateSvc
@@ -67,6 +70,12 @@ __all__ = [
     "FunctionStatusDef", "FunctionStatus",
     # Scheduler
     "WorkerId", "PodInfo", "GatewayConnection", "NodeResourceTracking",
+    # Scheduler Info
+    "SchedulerInfo",
+    # Pod
+    "FuncPod",
+    # Snapshot
+    "ContainerSnapshot",
     # Grouped exports
     "statesvc_models",
     "scheduler_models",
