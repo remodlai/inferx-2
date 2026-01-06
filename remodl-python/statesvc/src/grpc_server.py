@@ -145,6 +145,7 @@ class IxMetaServiceServicer(ixmeta_pb2_grpc.IxMetaServiceServicer):
         try:
             obj = request.obj
             obj_type = obj.kind
+            logger.info(f"Update request: obj_type={obj_type}, tenant={obj.tenant}, namespace={obj.namespace}, name={obj.name}")
             data = json.loads(obj.data)
 
             if obj_type == "namespace":
@@ -181,6 +182,18 @@ class IxMetaServiceServicer(ixmeta_pb2_grpc.IxMetaServiceServicer):
                 revision = await self.workflow_handle.execute_update(
                     StateSvcWorkflow.update_function_status,
                     status
+                )
+
+            elif obj_type == "node_info":
+                node = NodeInfo(
+                    tenant=obj.tenant,
+                    namespace=obj.namespace,
+                    name=obj.name,
+                    object=NodeSpec(**data)
+                )
+                revision = await self.workflow_handle.execute_update(
+                    StateSvcWorkflow.register_node,
+                    node
                 )
 
             else:
@@ -432,6 +445,34 @@ class IxMetaServiceServicer(ixmeta_pb2_grpc.IxMetaServiceServicer):
                         data=node.object.model_dump_json()
                     )
                     objs.append(obj)
+
+            elif obj_type == "funcstatus":
+                statuses = await self.workflow_handle.query("list_function_status", args=[None, None])
+                for status in statuses:
+                    objs.append(ixmeta_pb2.Obj(
+                        kind=obj_type,
+                        tenant=status['tenant'],
+                        namespace=status['namespace'],
+                        name=status['name'],
+                        revision=status.get('revision', 0),
+                        data=json.dumps(status['object'])
+                    ))
+
+            elif obj_type == "funcpolicy":
+                # Policies embedded in functions, return empty
+                pass
+
+            elif obj_type == "pod":
+                # Pods managed by NodeAgent, return empty
+                pass
+
+            elif obj_type == "snapshot":
+                # Snapshots managed by NodeAgent, return empty
+                pass
+
+            elif obj_type == "scheduler":
+                # No scheduler registration, return empty
+                pass
 
             else:
                 return ixmeta_pb2.ListResponseMessage(

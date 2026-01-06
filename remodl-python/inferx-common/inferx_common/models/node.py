@@ -22,7 +22,6 @@ class NodeResources(BaseModel):
 
 class NodeSpec(BaseModel):
     """Node specification registered by IxProxy"""
-    nodename: str = Field(description="Kubernetes node name (e.g., 'gpu-workerx2')")
     nodeEpoch: int = Field(description="Node registration epoch/version")
 
     # Network configuration

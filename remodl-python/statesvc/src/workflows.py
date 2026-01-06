@@ -52,7 +52,11 @@ class StateSvcWorkflow:
         self.namespaces: Dict[str, Namespace] = {}  # Key: "tenant/namespace"
         self.functions: Dict[str, Function] = {}  # Key: "tenant/namespace/name/version"
         self.function_status: Dict[str, FunctionStatus] = {}
+        self.func_policies: Dict[str, FuncPolicy] = {}
         self.nodes: Dict[str, NodeInfo] = {}
+        self.pods: Dict[str, FuncPod] = {}  # Managed by NodeAgent
+        self.snapshots: Dict[str, ContainerSnapshot] = {}  # Managed by NodeAgent
+        self.scheduler_info: Optional[SchedulerInfo] = None  # Scheduler registration
 
         # Metadata
         self.version = "0.2.0-temporal"
@@ -442,6 +446,45 @@ class StateSvcWorkflow:
     def list_nodes(self) -> List[NodeInfo]:
         """List all nodes"""
         return list(self.nodes.values())
+
+    # ==================== FuncPolicy Operations ====================
+
+    @workflow.query
+    def list_func_policies(self, tenant: Optional[str] = None) -> List[FuncPolicy]:
+        """List function policies"""
+        policies = list(self.func_policies.values())
+        if tenant:
+            policies = [p for p in policies if p.tenant == tenant]
+        return policies
+
+    # ==================== Pod Operations ====================
+
+    @workflow.query
+    def list_pods(self, tenant: Optional[str] = None, namespace: Optional[str] = None) -> List[FuncPod]:
+        """List pods"""
+        pods = list(self.pods.values())
+        if tenant:
+            pods = [p for p in pods if p.tenant == tenant]
+        if namespace:
+            pods = [p for p in pods if p.namespace == namespace]
+        return pods
+
+    # ==================== Snapshot Operations ====================
+
+    @workflow.query
+    def list_snapshots(self, tenant: Optional[str] = None) -> List[ContainerSnapshot]:
+        """List snapshots"""
+        snapshots = list(self.snapshots.values())
+        if tenant:
+            snapshots = [s for s in snapshots if s.tenant == tenant]
+        return snapshots
+
+    # ==================== Scheduler Operations ====================
+
+    @workflow.query
+    def get_scheduler_info(self) -> Optional[SchedulerInfo]:
+        """Get scheduler registration info"""
+        return self.scheduler_info
 
     # ==================== Utility Operations ====================
 

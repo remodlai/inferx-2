@@ -55,9 +55,9 @@ class FuncPolicyObject(BaseModel):
 
 class StandbyConfig(BaseModel):
     """Snapshot standby configuration"""
-    gpu: Literal["File", "Memory"] = Field(default="File", description="GPU memory snapshot location")
-    pageable: Literal["File", "Memory"] = Field(default="File", description="Pageable memory location")
-    pinned: Literal["File", "Memory"] = Field(default="File", description="Pinned memory location")
+    gpu: Literal["File", "Mem", "Blob"] = Field(default="File", description="GPU memory snapshot location")
+    pageable: Literal["File", "Mem", "Blob"] = Field(default="File", description="Pageable memory location")
+    pinned: Literal["File", "Mem", "Blob"] = Field(default="File", description="Pinned memory location")
 
 
 class SampleQuery(BaseModel):
