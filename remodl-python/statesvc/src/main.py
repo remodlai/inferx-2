@@ -1,37 +1,48 @@
 """
 StateSvc main entry point.
 
-Runs both Temporal worker and gRPC server in single process.
-This is what gets containerized and deployed to Kubernetes.
+Temporal Boost app running:
+- FastAPI server (replacing gRPC)
+- Multiple Temporal workers (workflow + activity workers)
 """
 
-import asyncio
 import logging
 import os
 from dotenv import load_dotenv
-from temporalio.client import Client
-from temporalio.worker import Worker
-from temporalio.contrib.pydantic import pydantic_data_converter
+
+# Load environment BEFORE importing temporal_boost
+load_dotenv()
+
+from temporal_boost import BoostApp, ASGIWorkerType
+from fastapi import FastAPI
 
 from .workflows import StateSvcWorkflow
-from .grpc_server import run_grpc_server
-from .activities import (
-    # Tenant
-    create_tenant_and_grant_role, delete_tenant,
-    grant_tenant_admin_role, revoke_tenant_admin_role,
-    # Namespace
-    create_namespace, update_namespace, delete_namespace,
-    grant_namespace_admin_role,
-    # Function
-    create_function, update_function, delete_function,
-    # Function Status
-    create_function_status, update_function_status,
-    # Node
-    register_node, update_node_state, delete_node,
+from .activities.tenant import (
+    create_tenant_and_grant_role,
+    delete_tenant,
+    grant_tenant_admin_role,
+    revoke_tenant_admin_role
 )
-
-# Load environment
-load_dotenv()
+from .activities.namespace import (
+    create_namespace,
+    update_namespace,
+    delete_namespace,
+    grant_namespace_admin_role
+)
+from .activities.function import (
+    create_function,
+    update_function,
+    delete_function
+)
+from .activities.function_status import (
+    create_function_status,
+    update_function_status
+)
+from .activities.node import (
+    register_node,
+    update_node_state,
+    delete_node
+)
 
 # Configure logging
 logging.basicConfig(
@@ -40,78 +51,90 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Create Temporal Boost app
+app = BoostApp(name="statesvc")
 
-async def run_temporal_worker(client: Client):
-    """Run Temporal worker"""
+# Create FastAPI app
+fastapi_app = FastAPI(title="InferX StateSvc")
 
-    # Collect all activities
-    activities = [
-        # Tenant
-        create_tenant_and_grant_role, delete_tenant,
-        grant_tenant_admin_role, revoke_tenant_admin_role,
-        # Namespace
-        create_namespace, update_namespace, delete_namespace,
-        grant_namespace_admin_role,
-        # Function
-        create_function, update_function, delete_function,
-        # Function Status
-        create_function_status, update_function_status,
-        # Node
-        register_node, update_node_state, delete_node,
+# TODO: Import and register FastAPI routes here
+# from .routes import register_routes
+# register_routes(fastapi_app)
+
+@fastapi_app.get("/health")
+async def health():
+    """Health check endpoint"""
+    return {"status": "healthy", "service": "statesvc"}
+
+
+# 1. Workflow Worker (orchestration)
+app.add_worker(
+    "workflow-worker",
+    "statesvc-workflow-queue",
+    workflows=[StateSvcWorkflow],
+    activities=[]
+)
+
+# 2. Tenant Activity Worker
+app.add_worker(
+    "tenant-worker",
+    "tenant-queue",
+    workflows=[StateSvcWorkflow],
+    activities=[
+        create_tenant_and_grant_role,
+        delete_tenant,
+        grant_tenant_admin_role,
+        revoke_tenant_admin_role
     ]
+)
 
-    # Create worker
-    worker = Worker(
-        client,
-        task_queue=os.getenv("TEMPORAL_TASK_QUEUE", "statesvc-tasks"),
-        workflows=[StateSvcWorkflow],
-        activities=activities,
-    )
+# 3. Namespace Activity Worker
+app.add_worker(
+    "namespace-worker",
+    "namespace-queue",
+    workflows=[StateSvcWorkflow],
+    activities=[
+        create_namespace,
+        update_namespace,
+        delete_namespace,
+        grant_namespace_admin_role
+    ]
+)
 
-    logger.info(f"Temporal worker started on task queue: {os.getenv('TEMPORAL_TASK_QUEUE', 'statesvc-tasks')}")
-    logger.info(f"Registered workflows: StateSvcWorkflow")
-    logger.info(f"Registered {len(activities)} activities")
+# 4. Function Activity Worker
+app.add_worker(
+    "function-worker",
+    "function-queue",
+    workflows=[StateSvcWorkflow],
+    activities=[
+        create_function,
+        update_function,
+        delete_function,
+        create_function_status,
+        update_function_status
+    ]
+)
 
-    # Run worker
-    await worker.run()
+# 5. Node Activity Worker
+app.add_worker(
+    "node-worker",
+    "node-queue",
+    workflows=[StateSvcWorkflow],
+    activities=[
+        register_node,
+        update_node_state,
+        delete_node
+    ]
+)
 
-
-async def main():
-    """Main entry point - runs both Temporal worker and gRPC server"""
-
-    # Temporal connection from environment
-    temporal_address = os.getenv("TEMPORAL_TARGET_HOST", "flow.remodl.ai:443")
-    temporal_namespace = os.getenv("TEMPORAL_NAMESPACE", "inferx")
-    temporal_tls = os.getenv("TEMPORAL_TLS", "true").lower() == "true"
-
-    logger.info(f"Connecting to Temporal at {temporal_address}, namespace: {temporal_namespace}, TLS: {temporal_tls}")
-
-    # Connect to Temporal with Pydantic v2 data converter
-    client = await Client.connect(
-        temporal_address,
-        namespace=temporal_namespace,
-        tls=temporal_tls,
-        data_converter=pydantic_data_converter
-    )
-
-    logger.info("Temporal client connected")
-
-    # Get gRPC port from environment
-    grpc_port = int(os.getenv("STATESVC_PORT", "1237"))
-
-    logger.info(f"Starting StateSvc with:")
-    logger.info(f"  - Temporal worker on task queue: {os.getenv('TEMPORAL_TASK_QUEUE', 'statesvc-tasks')}")
-    logger.info(f"  - gRPC server on port: {grpc_port}")
-
-    # Run both Temporal worker and gRPC server concurrently
-    await asyncio.gather(
-        run_temporal_worker(client),
-        run_grpc_server(client, grpc_port),
-    )
-
+# 6. FastAPI Server
+app.add_asgi_worker(
+    "api-worker",
+    fastapi_app,
+    "0.0.0.0",
+    int(os.getenv("STATESVC_PORT", "1237")),
+    asgi_worker_type=ASGIWorkerType.auto
+)
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("StateSvc shutting down")
+    app.run()

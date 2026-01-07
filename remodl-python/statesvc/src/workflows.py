@@ -90,6 +90,7 @@ class StateSvcWorkflow:
         revision = await workflow.execute_activity(
             create_tenant_and_grant_role,
             args=[tenant, creator_username],
+            task_queue="tenant-queue",
             start_to_close_timeout=timedelta(seconds=10),
             retry_policy=RetryPolicy(maximum_attempts=3)
         )
@@ -110,6 +111,7 @@ class StateSvcWorkflow:
         revision = await workflow.execute_activity(
             delete_tenant,
             tenant_name,
+            task_queue="tenant-queue",
             start_to_close_timeout=timedelta(seconds=10)
         )
 
@@ -146,6 +148,7 @@ class StateSvcWorkflow:
         revision = await workflow.execute_activity(
             create_namespace,
             namespace,
+            task_queue="namespace-queue",
             start_to_close_timeout=timedelta(seconds=10),
             retry_policy=RetryPolicy(maximum_attempts=3)
         )
@@ -155,6 +158,7 @@ class StateSvcWorkflow:
             await workflow.execute_activity(
                 grant_namespace_admin_role,
                 args=[namespace.tenant, namespace.name, creator_username],
+                task_queue="namespace-queue",
                 start_to_close_timeout=timedelta(seconds=5)
             )
 
@@ -175,6 +179,7 @@ class StateSvcWorkflow:
         revision = await workflow.execute_activity(
             update_namespace,
             namespace,
+            task_queue="namespace-queue",
             start_to_close_timeout=timedelta(seconds=10)
         )
 
@@ -195,6 +200,7 @@ class StateSvcWorkflow:
         revision = await workflow.execute_activity(
             delete_namespace,
             args=[tenant, namespace],
+            task_queue="namespace-queue",
             start_to_close_timeout=timedelta(seconds=10)
         )
 
@@ -235,6 +241,7 @@ class StateSvcWorkflow:
         revision = await workflow.execute_activity(
             create_function,
             function,
+            task_queue="function-queue",
             start_to_close_timeout=timedelta(seconds=10),
             retry_policy=RetryPolicy(maximum_attempts=3)
         )
@@ -255,6 +262,7 @@ class StateSvcWorkflow:
         await workflow.execute_activity(
             create_function_status,
             func_status,
+            task_queue="function-queue",
             start_to_close_timeout=timedelta(seconds=10)
         )
 
@@ -276,6 +284,7 @@ class StateSvcWorkflow:
         revision = await workflow.execute_activity(
             update_function,
             function,
+            task_queue="function-queue",
             start_to_close_timeout=timedelta(seconds=10)
         )
 
@@ -286,6 +295,7 @@ class StateSvcWorkflow:
             await workflow.execute_activity(
                 update_function_status,
                 status,
+                task_queue="function-queue",
                 start_to_close_timeout=timedelta(seconds=10)
             )
 
@@ -306,6 +316,7 @@ class StateSvcWorkflow:
         revision = await workflow.execute_activity(
             delete_function,
             args=[tenant, namespace, name, version],
+            task_queue="function-queue",
             start_to_close_timeout=timedelta(seconds=10)
         )
 
@@ -353,6 +364,7 @@ class StateSvcWorkflow:
         revision = await workflow.execute_activity(
             update_function_status,
             status,
+            task_queue="function-queue",
             start_to_close_timeout=timedelta(seconds=10)
         )
 
@@ -389,6 +401,7 @@ class StateSvcWorkflow:
         revision = await workflow.execute_activity(
             register_node,
             node,
+            task_queue="node-queue",
             start_to_close_timeout=timedelta(seconds=10),
             retry_policy=RetryPolicy(maximum_attempts=3)
         )
@@ -409,6 +422,7 @@ class StateSvcWorkflow:
         revision = await workflow.execute_activity(
             update_node_state,
             args=[node_name, state],
+            task_queue="node-queue",
             start_to_close_timeout=timedelta(seconds=10)
         )
 
@@ -428,6 +442,7 @@ class StateSvcWorkflow:
         revision = await workflow.execute_activity(
             delete_node,
             node_name,
+            task_queue="node-queue",
             start_to_close_timeout=timedelta(seconds=10)
         )
 
