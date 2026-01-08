@@ -6,14 +6,14 @@ from temporalio import activity
 from datetime import datetime
 
 from inferx_common.models import Namespace
-from .shared import get_db_pool
+from .shared import get_db_connection
 
 
 @activity.defn
 async def create_namespace(namespace: Namespace) -> int:
     """Create namespace in PostgreSQL"""
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
+    conn = await get_db_connection()
+    try:
         await conn.execute("""
             INSERT INTO inferx.namespaces (tenant, name, spec, disabled, created_at)
             VALUES ($1, $2, $3, $4, NOW())
@@ -22,13 +22,15 @@ async def create_namespace(namespace: Namespace) -> int:
 
         revision = int(datetime.now().timestamp() * 1000)
         return revision
+    finally:
+        await conn.close()
 
 
 @activity.defn
 async def update_namespace(namespace: Namespace) -> int:
     """Update namespace in PostgreSQL"""
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
+    conn = await get_db_connection()
+    try:
         await conn.execute("""
             UPDATE inferx.namespaces
             SET spec = $1, disabled = $2, updated_at = NOW()
@@ -37,29 +39,35 @@ async def update_namespace(namespace: Namespace) -> int:
 
         revision = int(datetime.now().timestamp() * 1000)
         return revision
+    finally:
+        await conn.close()
 
 
 @activity.defn
 async def delete_namespace(tenant: str, namespace: str) -> int:
     """Delete namespace from PostgreSQL"""
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
+    conn = await get_db_connection()
+    try:
         await conn.execute("""
             DELETE FROM inferx.namespaces WHERE tenant = $1 AND name = $2
         """, tenant, namespace)
 
         revision = int(datetime.now().timestamp() * 1000)
         return revision
+    finally:
+        await conn.close()
 
 
 @activity.defn
 async def grant_namespace_admin_role(tenant_name: str, namespace: str, username: str) -> None:
     """Grant namespace admin role to user"""
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
+    conn = await get_db_connection()
+    try:
         role_name = f"/namespace/admin/{tenant_name}/{namespace}"
         await conn.execute("""
             INSERT INTO inferx.userrole (username, rolename)
             VALUES ($1, $2)
             ON CONFLICT (username, rolename) DO NOTHING
         """, username, role_name)
+    finally:
+        await conn.close()

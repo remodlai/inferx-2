@@ -13,14 +13,14 @@ from inferx_common.models import (
     FuncPolicy, SchedulerInfo, FuncPod, ContainerSnapshot,
     NodeInfo, NodeSpec
 )
-from .shared import get_db_pool
+from .shared import get_db_connection
 
 
 @activity.defn
 async def query_tenants() -> List[Tenant]:
     """Query all tenants from PostgreSQL"""
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
+    conn = await get_db_connection()
+    try:
         rows = await conn.fetch("SELECT * FROM inferx.tenants ORDER BY name")
         return [
             Tenant(
@@ -30,13 +30,15 @@ async def query_tenants() -> List[Tenant]:
             )
             for row in rows
         ]
+    finally:
+        await conn.close()
 
 
 @activity.defn
 async def query_namespaces(tenant: Optional[str] = None) -> List[Namespace]:
     """Query namespaces from PostgreSQL"""
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
+    conn = await get_db_connection()
+    try:
         if tenant:
             rows = await conn.fetch("SELECT * FROM inferx.namespaces WHERE tenant = $1 ORDER BY name", tenant)
         else:
@@ -51,13 +53,15 @@ async def query_namespaces(tenant: Optional[str] = None) -> List[Namespace]:
             )
             for row in rows
         ]
+    finally:
+        await conn.close()
 
 
 @activity.defn
 async def query_functions(tenant: Optional[str] = None, namespace: Optional[str] = None) -> List[Function]:
     """Query functions from PostgreSQL"""
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
+    conn = await get_db_connection()
+    try:
         if tenant and namespace:
             rows = await conn.fetch("""
                 SELECT * FROM inferx.functions
@@ -86,13 +90,15 @@ async def query_functions(tenant: Optional[str] = None, namespace: Optional[str]
             )
             for row in rows
         ]
+    finally:
+        await conn.close()
 
 
 @activity.defn
 async def query_function_statuses(tenant: Optional[str] = None, namespace: Optional[str] = None) -> List[FunctionStatus]:
     """Query function statuses from PostgreSQL"""
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
+    conn = await get_db_connection()
+    try:
         if tenant and namespace:
             rows = await conn.fetch("""
                 SELECT * FROM inferx.function_status
@@ -126,13 +132,15 @@ async def query_function_statuses(tenant: Optional[str] = None, namespace: Optio
             )
             for row in rows
         ]
+    finally:
+        await conn.close()
 
 
 @activity.defn
 async def query_nodes() -> List[NodeInfo]:
     """Query all nodes from PostgreSQL"""
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
+    conn = await get_db_connection()
+    try:
         rows = await conn.fetch("SELECT * FROM inferx.nodes ORDER BY name")
         return [
             NodeInfo(
@@ -142,6 +150,8 @@ async def query_nodes() -> List[NodeInfo]:
             )
             for row in rows
         ]
+    finally:
+        await conn.close()
 
 
 # ==================== Empty Lists for Types Not Stored ====================

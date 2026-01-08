@@ -6,14 +6,14 @@ from temporalio import activity
 from datetime import datetime
 
 from inferx_common.models import FunctionStatus
-from .shared import get_db_pool
+from .shared import get_db_connection
 
 
 @activity.defn
 async def create_function_status(status: FunctionStatus) -> int:
     """Create function status in PostgreSQL"""
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
+    conn = await get_db_connection()
+    try:
         await conn.execute("""
             INSERT INTO inferx.function_status (tenant, namespace, name, version, state,
                                         snapshoting_failure_cnt, resuming_failure_cnt, created_at)
@@ -28,13 +28,15 @@ async def create_function_status(status: FunctionStatus) -> int:
 
         revision = int(datetime.now().timestamp() * 1000)
         return revision
+    finally:
+        await conn.close()
 
 
 @activity.defn
 async def update_function_status(status: FunctionStatus) -> int:
     """Update function status in PostgreSQL"""
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
+    conn = await get_db_connection()
+    try:
         await conn.execute("""
             UPDATE inferx.function_status
             SET state = $1,
@@ -47,3 +49,5 @@ async def update_function_status(status: FunctionStatus) -> int:
 
         revision = int(datetime.now().timestamp() * 1000)
         return revision
+    finally:
+        await conn.close()

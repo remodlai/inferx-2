@@ -6,14 +6,14 @@ from temporalio import activity
 from datetime import datetime
 
 from inferx_common.models import Function
-from .shared import get_db_pool
+from .shared import get_db_connection
 
 
 @activity.defn
 async def create_function(function: Function) -> int:
     """Create function in PostgreSQL"""
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
+    conn = await get_db_connection()
+    try:
         await conn.execute("""
             INSERT INTO inferx.functions (tenant, namespace, name, version, spec, created_at)
             VALUES ($1, $2, $3, $4, $5, NOW())
@@ -23,13 +23,15 @@ async def create_function(function: Function) -> int:
 
         revision = int(datetime.now().timestamp() * 1000)
         return revision
+    finally:
+        await conn.close()
 
 
 @activity.defn
 async def update_function(function: Function) -> int:
     """Update function in PostgreSQL"""
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
+    conn = await get_db_connection()
+    try:
         await conn.execute("""
             UPDATE inferx.functions
             SET spec = $1, updated_at = NOW()
@@ -39,13 +41,15 @@ async def update_function(function: Function) -> int:
 
         revision = int(datetime.now().timestamp() * 1000)
         return revision
+    finally:
+        await conn.close()
 
 
 @activity.defn
 async def delete_function(tenant: str, namespace: str, name: str, version: int) -> int:
     """Delete function from PostgreSQL"""
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
+    conn = await get_db_connection()
+    try:
         await conn.execute("""
             DELETE FROM inferx.functions
             WHERE tenant = $1 AND namespace = $2 AND name = $3 AND version = $4
@@ -53,3 +57,5 @@ async def delete_function(tenant: str, namespace: str, name: str, version: int) 
 
         revision = int(datetime.now().timestamp() * 1000)
         return revision
+    finally:
+        await conn.close()

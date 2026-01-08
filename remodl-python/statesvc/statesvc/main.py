@@ -57,14 +57,14 @@ app = BoostApp(name="statesvc")
 # Create FastAPI app
 fastapi_app = FastAPI(title="InferX StateSvc")
 
-# TODO: Import and register FastAPI routes here
-# from .routes import register_routes
-# register_routes(fastapi_app)
-
 @fastapi_app.get("/health")
 async def health():
     """Health check endpoint"""
     return {"status": "healthy", "service": "statesvc"}
+
+# Register routes
+from .routes import register_routes
+register_routes(fastapi_app)
 
 
 # 1. Workflow Worker (orchestration)

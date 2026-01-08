@@ -35,8 +35,6 @@ from .node import (
     delete_node,
 )
 
-from .shared import get_db_pool
-
 
 __all__ = [
     # Tenant
@@ -60,6 +58,4 @@ __all__ = [
     "register_node",
     "update_node_state",
     "delete_node",
-    # Shared
-    "get_db_pool",
 ]

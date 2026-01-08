@@ -6,14 +6,14 @@ from temporalio import activity
 from datetime import datetime
 
 from inferx_common.models import NodeInfo
-from .shared import get_db_pool
+from .shared import get_db_connection
 
 
 @activity.defn
 async def register_node(node: NodeInfo) -> int:
     """Register or update node in PostgreSQL"""
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
+    conn = await get_db_connection()
+    try:
         await conn.execute("""
             INSERT INTO inferx.nodes (name, node_ip, na_ip, agent_url, spec, state, created_at)
             VALUES ($1, $2, $3, $4, $5, $6, NOW())
@@ -30,13 +30,15 @@ async def register_node(node: NodeInfo) -> int:
 
         revision = int(datetime.now().timestamp() * 1000)
         return revision
+    finally:
+        await conn.close()
 
 
 @activity.defn
 async def update_node_state(node_name: str, state: str) -> int:
     """Update node state"""
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
+    conn = await get_db_connection()
+    try:
         await conn.execute("""
             UPDATE inferx.nodes
             SET state = $1, updated_at = NOW()
@@ -45,14 +47,18 @@ async def update_node_state(node_name: str, state: str) -> int:
 
         revision = int(datetime.now().timestamp() * 1000)
         return revision
+    finally:
+        await conn.close()
 
 
 @activity.defn
 async def delete_node(node_name: str) -> int:
     """Delete node from PostgreSQL"""
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
+    conn = await get_db_connection()
+    try:
         await conn.execute("DELETE FROM inferx.nodes WHERE name = $1", node_name)
 
         revision = int(datetime.now().timestamp() * 1000)
         return revision
+    finally:
+        await conn.close()
